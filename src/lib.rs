@@ -27,11 +27,9 @@ pub struct Model {
     pages_width: u32,
     pages_height: u32,
     image: Option<image::DynamicImage>,
-    scaled_image: Option<image::DynamicImage>,
-    image_blob: Option<stdweb::Value>,
-    image_str: Option<String>,
     raster_size: f32,
     max_radius: f32,
+    square_size: f32,
     input_pages: Vec<image::SubImage<image::DynamicImage>>,
     image_urls: Vec<String>,
 }
@@ -49,6 +47,11 @@ fn max_radius(raster_size: f32, resolution: f32) -> f32 {
     raster_size * resolution / 2.0
 }
 
+/// SquareSize=(float)(2f*((float)MaxRadius-1f)/Math.Sqrt(2f));
+fn square_size(max_radius: f32) -> f32 {
+    2.0 * (max_radius - 1.0) / std::f32::consts::SQRT_2
+}
+
 impl Component for Model {
     type Message = Msg;
     type Properties = ();
@@ -62,11 +65,9 @@ impl Component for Model {
             pages_width: 1,
             pages_height: 1,
             image: None,
-            scaled_image: None,
-            image_blob: None,
-            image_str: None,
             raster_size: 10.0,
             max_radius: max_radius(10.0, RESOLUTION),
+            square_size: square_size(max_radius(10.0, RESOLUTION)),
             input_pages: vec![],
             image_urls: vec![],
         }
@@ -111,6 +112,7 @@ impl Component for Model {
                 let as_f32 = s.parse::<f32>().unwrap();
                 self.raster_size = as_f32;
                 self.max_radius = max_radius(self.raster_size, RESOLUTION);
+                self.square_size = square_size(self.max_radius);
                 true
             }
 
@@ -131,7 +133,7 @@ impl Component for Model {
 
                     // calculate pages, left-right top-bottom
                     // each page is its own sub image
-                    let mut pages = vec![];
+                    let mut pages: Vec<image::SubImage<&image::DynamicImage>> = vec![];
 
                     stdweb::console!(log, "here0");
 
@@ -194,29 +196,107 @@ impl Component for Model {
                     let mut image_urls = vec![];
 
                     for page in pages {
-                        let (x, y) = page.dimensions();
+                        // create a dupe of this page on which we will draw circles
+                        let (sx, sy) = page.dimensions();
+                        let mut target_page =
+                            image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(sx, sy);
 
-                        let mut w = std::io::Cursor::new(Vec::new());
-                        let as_png = image::png::PNGEncoder::new(&mut w);
+                        let square_size = self.square_size;
 
-                        let page_as_bytes = page.to_image().into_raw();
+                        let squares_width = (sx as f32 / square_size).ceil() as u32;
+                        let squares_height = (sy as f32 / square_size).ceil() as u32;
 
-                        as_png
-                            .encode(&page_as_bytes, x, y, image::ColorType::Rgba8)
-                            .unwrap();
+                        // divide into squares
+                        for square_y in 0..squares_height {
+                            for square_x in 0..squares_width {
+                                let current_pixel_x: u32 =
+                                    (square_x as f32 * square_size).floor() as u32;
+                                let current_pixel_y: u32 =
+                                    (square_y as f32 * square_size).floor() as u32;
 
-                        let png_bytes = w.into_inner();
+                                let x_span = if current_pixel_x + (square_size.floor() as u32) < sx as u32 {
+                                    Some(square_size.floor() as u32)
+                                } else {
+                                    (sx as u32).checked_sub(current_pixel_x)
+                                };
 
-                        // https://docs.rs/stdweb/0.4.20/stdweb/struct.UnsafeTypedArray.html
-                        let png_slice = unsafe { stdweb::UnsafeTypedArray::new(&png_bytes) };
-                        let blob_url: stdweb::Value = stdweb::js! {
-                            let blob = new Blob([@{png_slice}], { type: "image/png" });
-                            let imageUrl = URL.createObjectURL(blob);
-                            return imageUrl
-                        };
+                                let y_span = if current_pixel_y + (square_size.floor() as u32) < sy as u32 {
+                                    Some(square_size.floor() as u32)
+                                } else {
+                                    (sy as u32).checked_sub(current_pixel_y)
+                                };
 
-                        let blob_url_str: String = blob_url.into_string().unwrap();
+                                if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
+                                    // for a given square, sample tht square form the source page
+                                    // getting radius and color
+                                    // float Radius=(1-Brightness/c)*MaxRadius;
+                                    let square = image::SubImage::new(
+                                        &page,
+                                        current_pixel_x,
+                                        current_pixel_y,
+                                        x_span,
+                                        y_span,
+                                    );
 
+                                    let pixels = square
+                                        .pixels()
+                                        .map(|(_, _, pixel)| pixel)
+                                        .collect::<Vec<image::Rgba<u8>>>();
+                                    let mut r: usize = pixels[0][0] as usize;
+                                    let mut g: usize = pixels[0][1] as usize;
+                                    let mut b: usize = pixels[0][2] as usize;
+                                    let mut a: usize = pixels[0][3] as usize;
+
+                                    let mut i = 0;
+
+                                    for pixel in pixels {
+                                        // avg_co;or = imageproc::pixelops::interpolate(avg_color, pixel, 0.5);
+                                        i += 1;
+                                        r += pixel[0] as usize;
+                                        g += pixel[1] as usize;
+                                        b += pixel[2] as usize;
+                                        a += pixel[3] as usize;
+                                    }
+
+                                    let avg_color = image::Rgba([(r / i) as u8, (g / i) as u8, (b / i) as u8, (a / i) as u8]);
+
+                                    // write the sampling as a circle to the target page
+                                    let (cx, cy) = (
+                                        current_pixel_x as i32 + (square_size / 2.0).floor() as i32,
+                                        current_pixel_y as i32 + (square_size / 2.0).floor() as i32,
+                                    );
+
+                                    // let left = image::Rgba([100u8, 100u8, 100, 255u8]);
+                                    // let right = image::Rgba([0u8, 0u8, 0, 255u8]);
+                                    // let avg = imageproc::pixelops::interpolate(left, right, 0.5);
+
+                                    // stdweb::console!(log, avg[0], avg[1], avg[2], avg[3]);
+
+                                    // let solid_blue = image::Rgba([0u8, 0u8, 255u8, 255u8]);
+                                    imageproc::drawing::draw_filled_circle_mut(
+                                        &mut target_page,
+                                        (cx, cy),
+                                        10,
+                                        avg_color,
+                                    );
+                                    // pub fn draw_filled_circle_mut<C>(
+                                    //     canvas: &mut C,
+                                    //     center: (i32, i32),
+                                    //     radius: i32,
+                                    //     color: C::Pixel
+                                    // )
+                                    // (5, 0, 0, 0)
+                                }
+                            }
+                        }
+
+                        // create a blob_str_url for the target page
+
+                        // let blob_url_str = image_to_object_url(page);
+                        let dyno = image::DynamicImage::ImageRgba8(target_page);
+                        let target_page_as_subimage: image::SubImage<&image::DynamicImage> =
+                            image::SubImage::new(&dyno, 0, 0, sx, sy);
+                        let blob_url_str = image_to_object_url(target_page_as_subimage);
                         image_urls.push(blob_url_str);
                     }
 
@@ -236,7 +316,15 @@ impl Component for Model {
                 </div>
 
                 <div>
+                    { format!("{}w x {}h pages", self.pages_width, self.pages_height) }
+                </div>
+
+                <div>
                     { format!("max radius: {}", self.max_radius)}
+                </div>
+
+                <div>
+                    { format!("square size: {}", self.square_size)}
                 </div>
 
                 <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
@@ -250,9 +338,9 @@ impl Component for Model {
                 }) />
 
                 <span>{"width"}</span>
-                <input type="text" name="width" value={self.pages_width} oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
+                <input type="range" name="width" min="1" max="25" value={self.pages_width} oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
                 <span>{"height"}</span>
-                <input type="text" name="height" value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
+                <input type="range" name="height" min="1" max="25" value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
 
                 <span>{"raster size"}</span>
                 <input type="text" name="height" value={self.raster_size} oninput=self.link.callback(|e: InputData| Msg::UpdateRasterSize(e.value))/>
@@ -275,4 +363,30 @@ impl Component for Model {
             </div>
         }
     }
+}
+
+fn image_to_object_url(image: image::SubImage<&image::DynamicImage>) -> String {
+    let (x, y) = image.dimensions();
+
+    let mut w = std::io::Cursor::new(Vec::new());
+    let as_png = image::png::PNGEncoder::new(&mut w);
+
+    let page_as_bytes = image.to_image().into_raw();
+
+    as_png
+        .encode(&page_as_bytes, x, y, image::ColorType::Rgba8)
+        .unwrap();
+
+    let png_bytes = w.into_inner();
+
+    // https://docs.rs/stdweb/0.4.20/stdweb/struct.UnsafeTypedArray.html
+    let png_slice = unsafe { stdweb::UnsafeTypedArray::new(&png_bytes) };
+    let blob_url: stdweb::Value = stdweb::js! {
+        const slice = @{png_slice};
+        const blob = new Blob([slice], { type: "image/png" });
+        const imageUrl = URL.createObjectURL(blob);
+        return imageUrl
+    };
+
+    blob_url.into_string().unwrap()
 }
