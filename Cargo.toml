@@ -12,3 +12,7 @@ image = { version = "0.23", default-features = false, features = ["gif", "jpeg",
 imageproc = "0.20"
 stdweb = "0.4.20"
 yew = { version = "0.14", features = ["std_web"] }
+
+[profile.release]
+lto = true
+opt-level = 's'
