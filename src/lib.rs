@@ -326,7 +326,7 @@ impl Component for Model {
                    { "Rasterize" }
                 </button>
 
-                <a href="https://github.com/ckampfe/rat">source code</a>
+                <a href="https://github.com/ckampfe/rat">{ "source code" }</a>
 
                 <div>
                 {
