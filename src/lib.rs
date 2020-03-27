@@ -48,6 +48,8 @@ impl Component for Model {
     type Properties = ();
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
+        let raster_size = 0.2;
+        let max_radius = max_radius(raster_size, RESOLUTION);
         Model {
             link,
             reader: ReaderService::new(),
@@ -56,9 +58,9 @@ impl Component for Model {
             pages_width: 1,
             pages_height: 1,
             image: None,
-            raster_size: 10.0,
-            max_radius: max_radius(10.0, RESOLUTION),
-            square_size: square_size(max_radius(10.0, RESOLUTION)),
+            raster_size,
+            max_radius,
+            square_size: square_size(max_radius),
             // input_pages: vec![],
             image_urls: vec![],
         }
@@ -90,12 +92,18 @@ impl Component for Model {
             Msg::UpdatePageWidth(s) => {
                 let as_u32 = s.parse::<u32>().unwrap();
                 self.pages_width = as_u32;
+
+                stdweb::console!(log, "page width set to", self.pages_width);
+
                 true
             }
 
             Msg::UpdatePageHeight(s) => {
                 let as_u32 = s.parse::<u32>().unwrap();
                 self.pages_height = as_u32;
+
+                stdweb::console!(log, "page height set to", self.pages_height);
+
                 true
             }
 
@@ -104,6 +112,11 @@ impl Component for Model {
                 self.raster_size = as_f32;
                 self.max_radius = max_radius(self.raster_size, RESOLUTION);
                 self.square_size = square_size(self.max_radius);
+
+                stdweb::console!(log, "raster size set to", self.raster_size);
+                stdweb::console!(log, "max_radius set to", self.max_radius);
+                stdweb::console!(log, "square_size set to", self.square_size);
+
                 true
             }
 
@@ -120,16 +133,11 @@ impl Component for Model {
 
                     let (sx, sy) = image_scaled_to_fit_on_pages.dimensions();
 
-                    stdweb::console!(log, "scaled dims", sx, sy);
+                    stdweb::console!(log, "dimensions of scaled image:", sx, sy);
 
                     // calculate pages, left-right top-bottom
                     // each page is its own sub image
                     let mut pages: Vec<SubImage<&DynamicImage>> = vec![];
-
-                    stdweb::console!(log, "here0");
-
-                    stdweb::console!(log, "page width", PAGE_PIXELS_WIDE);
-                    stdweb::console!(log, "page height", PAGE_PIXELS_TALL);
 
                     for page_y in 0..self.pages_height {
                         for page_x in 0..self.pages_width {
@@ -137,14 +145,6 @@ impl Component for Model {
                                 (page_x as f32 * PAGE_PIXELS_WIDE).floor() as u32;
                             let current_pixel_y: u32 =
                                 (page_y as f32 * PAGE_PIXELS_TALL).floor() as u32;
-
-                            stdweb::console!(
-                                log,
-                                "current pixel x",
-                                current_pixel_x,
-                                "current pixel y",
-                                current_pixel_y
-                            );
 
                             // this is kind of horrific and I'm not sure it does exactly what I want.
                             // for example if you configure 2x2 pages, and the scaled image can't fit
@@ -165,8 +165,6 @@ impl Component for Model {
                             };
 
                             if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
-                                stdweb::console!(log, "spans", x_span, y_span);
-
                                 let page = SubImage::new(
                                     &image_scaled_to_fit_on_pages,
                                     current_pixel_x,
@@ -174,10 +172,6 @@ impl Component for Model {
                                     x_span,
                                     y_span,
                                 );
-
-                                let (page_dim_x, page_dim_y) = page.dimensions();
-
-                                stdweb::console!(log, "page dims", page_dim_x, page_dim_y);
 
                                 pages.push(page);
                             }
@@ -302,18 +296,37 @@ impl Component for Model {
                 }) />
 
                 <span>{"width"}</span>
-                <input type="range" name="width" min="1" max="25" value={self.pages_width} oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
+                <input
+                  type="range"
+                  name="width"
+                  min="1"
+                  max="25"
+                  value={self.pages_width}
+                  oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
+
                 <span>{"height"}</span>
-                <input type="range" name="height" min="1" max="25" value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
+                <input
+                  type="range"
+                  name="height"
+                  min="1"
+                  max="25"
+                  value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
 
                 <span>{"raster size"}</span>
-                <input type="text" name="height" value={self.raster_size} oninput=self.link.callback(|e: InputData| Msg::UpdateRasterSize(e.value))/>
+                <input
+                  min="0.1"
+                  max="5"
+                  step="0.05"
+                  type="range"
+                  name="height"
+                  value={self.raster_size}
+                  oninput=self.link.callback(|e: InputData| Msg::UpdateRasterSize(e.value))/>
 
                 <button onclick=self.link.callback(|_| Msg::Rasterize)>
                    { "Rasterize" }
                 </button>
 
-                <div style="display:inline;">
+                <div>
                 {
                     for self.image_urls.iter().map(|image_url| {
                         html! {
