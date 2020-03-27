@@ -1,6 +1,6 @@
 #![recursion_limit = "1024"]
 
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, SubImage};
 use stdweb::js;
 use stdweb::web::File;
 use yew::services::reader::{FileData, ReaderTask};
@@ -30,7 +30,7 @@ pub struct Model {
     raster_size: f32,
     max_radius: f32,
     square_size: f32,
-    input_pages: Vec<image::SubImage<image::DynamicImage>>,
+    // input_pages: Vec<image::SubImage<image::DynamicImage>>,
     image_urls: Vec<String>,
 }
 
@@ -41,15 +41,6 @@ pub enum Msg {
     UpdatePageHeight(String),
     UpdateRasterSize(String),
     Rasterize,
-}
-
-fn max_radius(raster_size: f32, resolution: f32) -> f32 {
-    raster_size * resolution / 2.0
-}
-
-/// SquareSize=(float)(2f*((float)MaxRadius-1f)/Math.Sqrt(2f));
-fn square_size(max_radius: f32) -> f32 {
-    2.0 * (max_radius - 1.0) / std::f32::consts::SQRT_2
 }
 
 impl Component for Model {
@@ -68,7 +59,7 @@ impl Component for Model {
             raster_size: 10.0,
             max_radius: max_radius(10.0, RESOLUTION),
             square_size: square_size(max_radius(10.0, RESOLUTION)),
-            input_pages: vec![],
+            // input_pages: vec![],
             image_urls: vec![],
         }
     }
@@ -133,7 +124,7 @@ impl Component for Model {
 
                     // calculate pages, left-right top-bottom
                     // each page is its own sub image
-                    let mut pages: Vec<image::SubImage<&image::DynamicImage>> = vec![];
+                    let mut pages: Vec<SubImage<&DynamicImage>> = vec![];
 
                     stdweb::console!(log, "here0");
 
@@ -176,7 +167,7 @@ impl Component for Model {
                             if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
                                 stdweb::console!(log, "spans", x_span, y_span);
 
-                                let page = image::SubImage::new(
+                                let page = SubImage::new(
                                     &image_scaled_to_fit_on_pages,
                                     current_pixel_x,
                                     current_pixel_y,
@@ -198,8 +189,7 @@ impl Component for Model {
                     for page in pages {
                         // create a dupe of this page on which we will draw circles
                         let (sx, sy) = page.dimensions();
-                        let mut target_page =
-                            image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(sx, sy);
+                        let mut target_page = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(sx, sy);
 
                         let square_size = self.square_size;
 
@@ -214,23 +204,24 @@ impl Component for Model {
                                 let current_pixel_y: u32 =
                                     (square_y as f32 * square_size).floor() as u32;
 
-                                let x_span = if current_pixel_x + (square_size.floor() as u32) < sx as u32 {
-                                    Some(square_size.floor() as u32)
-                                } else {
-                                    (sx as u32).checked_sub(current_pixel_x)
-                                };
+                                let x_span =
+                                    if current_pixel_x + (square_size.floor() as u32) < sx as u32 {
+                                        Some(square_size.floor() as u32)
+                                    } else {
+                                        (sx as u32).checked_sub(current_pixel_x)
+                                    };
 
-                                let y_span = if current_pixel_y + (square_size.floor() as u32) < sy as u32 {
-                                    Some(square_size.floor() as u32)
-                                } else {
-                                    (sy as u32).checked_sub(current_pixel_y)
-                                };
+                                let y_span =
+                                    if current_pixel_y + (square_size.floor() as u32) < sy as u32 {
+                                        Some(square_size.floor() as u32)
+                                    } else {
+                                        (sy as u32).checked_sub(current_pixel_y)
+                                    };
 
                                 if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
-                                    // for a given square, sample tht square form the source page
+                                    // for a given square, sample the square form the source page
                                     // getting radius and color
-                                    // float Radius=(1-Brightness/c)*MaxRadius;
-                                    let square = image::SubImage::new(
+                                    let square = SubImage::new(
                                         &page,
                                         current_pixel_x,
                                         current_pixel_y,
@@ -241,24 +232,13 @@ impl Component for Model {
                                     let pixels = square
                                         .pixels()
                                         .map(|(_, _, pixel)| pixel)
-                                        .collect::<Vec<image::Rgba<u8>>>();
-                                    let mut r: usize = pixels[0][0] as usize;
-                                    let mut g: usize = pixels[0][1] as usize;
-                                    let mut b: usize = pixels[0][2] as usize;
-                                    let mut a: usize = pixels[0][3] as usize;
+                                        .collect::<Vec<Rgba<u8>>>();
 
-                                    let mut i = 0;
+                                    let average_pixel = average_color(&pixels);
 
-                                    for pixel in pixels {
-                                        // avg_co;or = imageproc::pixelops::interpolate(avg_color, pixel, 0.5);
-                                        i += 1;
-                                        r += pixel[0] as usize;
-                                        g += pixel[1] as usize;
-                                        b += pixel[2] as usize;
-                                        a += pixel[3] as usize;
-                                    }
+                                    let average_brightness = average_brightness(&pixels);
 
-                                    let avg_color = image::Rgba([(r / i) as u8, (g / i) as u8, (b / i) as u8, (a / i) as u8]);
+                                    let radius = radius(average_brightness, self.max_radius);
 
                                     // write the sampling as a circle to the target page
                                     let (cx, cy) = (
@@ -266,36 +246,20 @@ impl Component for Model {
                                         current_pixel_y as i32 + (square_size / 2.0).floor() as i32,
                                     );
 
-                                    // let left = image::Rgba([100u8, 100u8, 100, 255u8]);
-                                    // let right = image::Rgba([0u8, 0u8, 0, 255u8]);
-                                    // let avg = imageproc::pixelops::interpolate(left, right, 0.5);
-
-                                    // stdweb::console!(log, avg[0], avg[1], avg[2], avg[3]);
-
-                                    // let solid_blue = image::Rgba([0u8, 0u8, 255u8, 255u8]);
                                     imageproc::drawing::draw_filled_circle_mut(
                                         &mut target_page,
                                         (cx, cy),
-                                        10,
-                                        avg_color,
+                                        radius as i32,
+                                        average_pixel,
                                     );
-                                    // pub fn draw_filled_circle_mut<C>(
-                                    //     canvas: &mut C,
-                                    //     center: (i32, i32),
-                                    //     radius: i32,
-                                    //     color: C::Pixel
-                                    // )
-                                    // (5, 0, 0, 0)
                                 }
                             }
                         }
 
                         // create a blob_str_url for the target page
-
-                        // let blob_url_str = image_to_object_url(page);
-                        let dyno = image::DynamicImage::ImageRgba8(target_page);
-                        let target_page_as_subimage: image::SubImage<&image::DynamicImage> =
-                            image::SubImage::new(&dyno, 0, 0, sx, sy);
+                        let dyno = DynamicImage::ImageRgba8(target_page);
+                        let target_page_as_subimage: SubImage<&DynamicImage> =
+                            SubImage::new(&dyno, 0, 0, sx, sy);
                         let blob_url_str = image_to_object_url(target_page_as_subimage);
                         image_urls.push(blob_url_str);
                     }
@@ -349,20 +313,31 @@ impl Component for Model {
                    { "Rasterize" }
                 </button>
 
+                <div style="display:inline;">
                 {
                     for self.image_urls.iter().map(|image_url| {
                         html! {
-                            <div>
-                                <a href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
-                                <img src={format!("{}", image_url)} alt={"meh"}></img>
+                            <div style="display: inline;">
+                                <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
+                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"}></img>
                             </div>
                         }
                     })
                 }
+                </div>
 
             </div>
         }
     }
+}
+
+fn max_radius(raster_size: f32, resolution: f32) -> f32 {
+    raster_size * resolution / 2.0
+}
+
+/// SquareSize=(float)(2f*((float)MaxRadius-1f)/Math.Sqrt(2f));
+fn square_size(max_radius: f32) -> f32 {
+    2.0 * (max_radius - 1.0) / std::f32::consts::SQRT_2
 }
 
 fn image_to_object_url(image: image::SubImage<&image::DynamicImage>) -> String {
@@ -389,4 +364,50 @@ fn image_to_object_url(image: image::SubImage<&image::DynamicImage>) -> String {
     };
 
     blob_url.into_string().unwrap()
+}
+
+fn average_color(pixels: &[Rgba<u8>]) -> Rgba<u8> {
+    let mut r: usize = pixels[0][0] as usize;
+    let mut g: usize = pixels[0][1] as usize;
+    let mut b: usize = pixels[0][2] as usize;
+    let mut a: usize = pixels[0][3] as usize;
+
+    let pixels_len = pixels.len();
+
+    for pixel in pixels {
+        r += pixel[0] as usize;
+        g += pixel[1] as usize;
+        b += pixel[2] as usize;
+        a += pixel[3] as usize;
+    }
+
+    Rgba([
+        (r / pixels_len) as u8,
+        (g / pixels_len) as u8,
+        (b / pixels_len) as u8,
+        (a / pixels_len) as u8,
+    ])
+}
+
+fn average_brightness(pixels: &[Rgba<u8>]) -> f32 {
+    let i = pixels.len() as f32;
+    let mut brightness_nominal = brightness(pixels[0]);
+
+    for pixel in pixels {
+        brightness_nominal += brightness(*pixel);
+    }
+
+    brightness_nominal / i
+}
+
+fn brightness(pixel: Rgba<u8>) -> f32 {
+    let r = pixel[0] as f32 / 255.0;
+    let g = pixel[1] as f32 / 255.0;
+    let b = pixel[2] as f32 / 255.0;
+
+    0.299 * r + 0.587 * g + 0.114 * b
+}
+
+fn radius(average_brightness: f32, max_radius: f32) -> f32 {
+    (1.0 - average_brightness) * max_radius
 }
