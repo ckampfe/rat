@@ -285,46 +285,50 @@ impl Component for Model {
                     { format!("square size: {}", self.square_size)}
                 </div>
 
-                <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
-                    let mut res = vec![];
+                <div>
+                    <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
+                        let mut res = vec![];
 
-                    if let ChangeData::Files(files) = v {
-                        res.extend(files);
-                    }
+                        if let ChangeData::Files(files) = v {
+                            res.extend(files);
+                        }
 
-                    Msg::FileSelection(res)
-                }) />
+                        Msg::FileSelection(res)
+                    }) />
 
-                <span>{"width"}</span>
-                <input
-                  type="range"
-                  name="width"
-                  min="1"
-                  max="25"
-                  value={self.pages_width}
-                  oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
+                    <div>{"width"}</div>
+                    <input
+                      type="range"
+                      name="width"
+                      min="1"
+                      max="25"
+                      value={self.pages_width}
+                      oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
 
-                <span>{"height"}</span>
-                <input
-                  type="range"
-                  name="height"
-                  min="1"
-                  max="25"
-                  value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
+                    <div>{"height"}</div>
+                    <input
+                      type="range"
+                      name="height"
+                      min="1"
+                      max="25"
+                      value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
 
-                <span>{"raster size"}</span>
-                <input
-                  min="0.1"
-                  max="5"
-                  step="0.05"
-                  type="range"
-                  name="height"
-                  value={self.raster_size}
-                  oninput=self.link.callback(|e: InputData| Msg::UpdateRasterSize(e.value))/>
+                    <div>{"raster size"}</div>
+                    <input
+                      min="0.1"
+                      max="5"
+                      step="0.05"
+                      type="range"
+                      name="height"
+                      value={self.raster_size}
+                      oninput=self.link.callback(|e: InputData| Msg::UpdateRasterSize(e.value))/>
 
-                <button onclick=self.link.callback(|_| Msg::Rasterize)>
-                   { "Rasterize" }
-                </button>
+                     <div>
+                         <button onclick=self.link.callback(|_| Msg::Rasterize)>
+                            { "Rasterize" }
+                         </button>
+                     </div>
+                </div>
 
                 <a href="https://github.com/ckampfe/rat">{ "source code" }</a>
 
