@@ -131,9 +131,15 @@ impl Component for Model {
                         image::imageops::Nearest,
                     );
 
-                    let (sx, sy) = image_scaled_to_fit_on_pages.dimensions();
+                    let (scaled_image_width_pixels, scaled_image_height_pixels) =
+                        image_scaled_to_fit_on_pages.dimensions();
 
-                    stdweb::console!(log, "dimensions of scaled image:", sx, sy);
+                    stdweb::console!(
+                        log,
+                        "dimensions of scaled image:",
+                        scaled_image_width_pixels,
+                        scaled_image_height_pixels
+                    );
 
                     // calculate pages, left-right top-bottom
                     // each page is its own sub image
@@ -149,19 +155,19 @@ impl Component for Model {
                             // this is kind of horrific and I'm not sure it does exactly what I want.
                             // for example if you configure 2x2 pages, and the scaled image can't fit
                             let x_span = if current_pixel_x + (PAGE_PIXELS_WIDE.floor() as u32)
-                                < sx as u32
+                                < scaled_image_width_pixels as u32
                             {
                                 Some(PAGE_PIXELS_WIDE.floor() as u32)
                             } else {
-                                (sx as u32).checked_sub(current_pixel_x)
+                                (scaled_image_width_pixels as u32).checked_sub(current_pixel_x)
                             };
 
                             let y_span = if current_pixel_y + (PAGE_PIXELS_TALL.floor() as u32)
-                                < sy as u32
+                                < scaled_image_height_pixels as u32
                             {
                                 Some(PAGE_PIXELS_TALL.floor() as u32)
                             } else {
-                                (sy as u32).checked_sub(current_pixel_y)
+                                (scaled_image_height_pixels as u32).checked_sub(current_pixel_y)
                             };
 
                             if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
@@ -182,13 +188,17 @@ impl Component for Model {
 
                     for page in pages {
                         // create a dupe of this page on which we will draw circles
-                        let (sx, sy) = page.dimensions();
-                        let mut target_page = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(sx, sy);
+                        let (page_width_pixels, page_height_pixels) = page.dimensions();
+                        let mut target_page = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(
+                            page_width_pixels,
+                            page_height_pixels,
+                        );
 
                         let square_size = self.square_size;
 
-                        let squares_width = (sx as f32 / square_size).ceil() as u32;
-                        let squares_height = (sy as f32 / square_size).ceil() as u32;
+                        let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
+                        let squares_height =
+                            (page_height_pixels as f32 / square_size).ceil() as u32;
 
                         // divide into squares
                         for square_y in 0..squares_height {
@@ -198,19 +208,21 @@ impl Component for Model {
                                 let current_pixel_y: u32 =
                                     (square_y as f32 * square_size).floor() as u32;
 
-                                let x_span =
-                                    if current_pixel_x + (square_size.floor() as u32) < sx as u32 {
-                                        Some(square_size.floor() as u32)
-                                    } else {
-                                        (sx as u32).checked_sub(current_pixel_x)
-                                    };
+                                let x_span = if current_pixel_x + (square_size.floor() as u32)
+                                    < page_width_pixels as u32
+                                {
+                                    Some(square_size.floor() as u32)
+                                } else {
+                                    (page_width_pixels as u32).checked_sub(current_pixel_x)
+                                };
 
-                                let y_span =
-                                    if current_pixel_y + (square_size.floor() as u32) < sy as u32 {
-                                        Some(square_size.floor() as u32)
-                                    } else {
-                                        (sy as u32).checked_sub(current_pixel_y)
-                                    };
+                                let y_span = if current_pixel_y + (square_size.floor() as u32)
+                                    < page_height_pixels as u32
+                                {
+                                    Some(square_size.floor() as u32)
+                                } else {
+                                    (page_height_pixels as u32).checked_sub(current_pixel_y)
+                                };
 
                                 if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
                                     // for a given square, sample the square form the source page
@@ -235,14 +247,14 @@ impl Component for Model {
                                     let radius = radius(average_brightness, self.max_radius);
 
                                     // write the sampling as a circle to the target page
-                                    let (cx, cy) = (
+                                    let circle_center = (
                                         current_pixel_x as i32 + (square_size / 2.0).floor() as i32,
                                         current_pixel_y as i32 + (square_size / 2.0).floor() as i32,
                                     );
 
                                     imageproc::drawing::draw_filled_circle_mut(
                                         &mut target_page,
-                                        (cx, cy),
+                                        circle_center,
                                         radius as i32,
                                         average_pixel,
                                     );
@@ -253,7 +265,7 @@ impl Component for Model {
                         // create a blob_str_url for the target page
                         let dyno = DynamicImage::ImageRgba8(target_page);
                         let target_page_as_subimage: SubImage<&DynamicImage> =
-                            SubImage::new(&dyno, 0, 0, sx, sy);
+                            SubImage::new(&dyno, 0, 0, page_width_pixels, page_height_pixels);
                         let blob_url_str = image_to_object_url(target_page_as_subimage);
                         image_urls.push(blob_url_str);
                     }
