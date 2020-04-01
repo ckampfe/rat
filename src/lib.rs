@@ -1,6 +1,7 @@
 #![recursion_limit = "1024"]
 
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, SubImage};
+use std::slice::Iter;
 use stdweb::js;
 use stdweb::web::File;
 use yew::services::reader::{FileData, ReaderTask};
@@ -9,15 +10,103 @@ use yew::{html, html::ChangeData, Component, ComponentLink, Html, InputData, Sho
 
 const PIXELS_PER_INCH: f32 = 72.0;
 
-const PAPER_WIDTH_INCHES: f32 = 8.5;
-
-const PAPER_HEIGHT_INCHES: f32 = 11.0;
-
-const PAGE_PIXELS_WIDE: f32 = PAPER_WIDTH_INCHES * PIXELS_PER_INCH;
-
-const PAGE_PIXELS_TALL: f32 = PAPER_HEIGHT_INCHES * PIXELS_PER_INCH;
-
 const RESOLUTION: f32 = 144.0;
+
+enum PaperSize {
+    USLetter,
+    A4,
+    A3,
+}
+
+impl PaperSize {
+    fn dimensions_inches(&self, orientation: Orientation) -> Size {
+        match self {
+            PaperSize::USLetter => {
+                if orientation == Orientation::Portrait {
+                    Size::new(8.5, 11.0, PIXELS_PER_INCH)
+                } else {
+                    Size::new(11.0, 8.5, PIXELS_PER_INCH)
+                }
+            }
+            PaperSize::A4 => {
+                if orientation == Orientation::Portrait {
+                    Size::new(8.3, 11.7, PIXELS_PER_INCH)
+                } else {
+                    Size::new(11.7, 8.3, PIXELS_PER_INCH)
+                }
+            }
+            PaperSize::A3 => {
+                if orientation == Orientation::Portrait {
+                    Size::new(11.7, 16.5, PIXELS_PER_INCH)
+                } else {
+                    Size::new(16.5, 11.7, PIXELS_PER_INCH)
+                }
+            }
+        }
+    }
+
+    fn width_inches(&self, orientation: Orientation) -> f32 {
+        self.dimensions_inches(orientation).width_inches
+    }
+
+    fn height_inches(&self, orientation: Orientation) -> f32 {
+        self.dimensions_inches(orientation).height_inches
+    }
+
+    fn width_pixels(&self, orientation: Orientation) -> f32 {
+        self.dimensions_inches(orientation).width_pixels
+    }
+
+    fn height_pixels(&self, orientation: Orientation) -> f32 {
+        self.dimensions_inches(orientation).height_pixels
+    }
+
+    fn to_str(&self) -> &str {
+        match self {
+            PaperSize::USLetter => "US Letter",
+            PaperSize::A4 => "A4",
+            PaperSize::A3 => "A3",
+        }
+    }
+
+    fn from_string(s: String) -> Option<PaperSize> {
+        match s.as_str() {
+            "US Letter" => Some(PaperSize::USLetter),
+            "A4" => Some(PaperSize::A4),
+            "A3" => Some(PaperSize::A3),
+            _ => None,
+        }
+    }
+
+    fn iterator() -> Iter<'static, Self> {
+        const PAPER_SIZES: [PaperSize; 3] = [PaperSize::USLetter, PaperSize::A4, PaperSize::A3];
+        PAPER_SIZES.iter()
+    }
+}
+
+struct Size {
+    width_inches: f32,
+    height_inches: f32,
+    width_pixels: f32,
+    height_pixels: f32,
+}
+
+impl Size {
+    fn new(width_inches: f32, height_inches: f32, pixels_per_inch: f32) -> Self {
+        Self {
+            width_inches,
+            height_inches,
+            width_pixels: width_inches * pixels_per_inch,
+            height_pixels: height_inches * pixels_per_inch,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Orientation {
+    Portrait,
+    Landscape,
+}
 
 pub struct Model {
     link: ComponentLink<Self>,
@@ -32,6 +121,8 @@ pub struct Model {
     square_size: f32,
     // input_pages: Vec<image::SubImage<image::DynamicImage>>,
     image_urls: Vec<String>,
+    paper_size: PaperSize,
+    orientation: Orientation,
 }
 
 pub enum Msg {
@@ -41,6 +132,8 @@ pub enum Msg {
     UpdatePageHeight(String),
     UpdateRasterSize(String),
     Rasterize,
+    UpdatePaperSize(String),
+    UpdateOrientation(String),
 }
 
 impl Component for Model {
@@ -63,6 +156,8 @@ impl Component for Model {
             square_size: square_size(max_radius),
             // input_pages: vec![],
             image_urls: vec![],
+            paper_size: PaperSize::USLetter,
+            orientation: Orientation::Portrait,
         }
     }
 
@@ -121,8 +216,10 @@ impl Component for Model {
             }
 
             Msg::Rasterize => {
-                let pages_width_pixels = self.pages_width as f32 * PAGE_PIXELS_WIDE;
-                let pages_height_pixels = self.pages_height as f32 * PAGE_PIXELS_TALL;
+                let pages_width_pixels =
+                    self.pages_width as f32 * self.paper_size.width_pixels(self.orientation);
+                let pages_height_pixels =
+                    self.pages_height as f32 * self.paper_size.height_pixels(self.orientation);
 
                 if let Some(image) = &self.image {
                     let image_scaled_to_fit_on_pages = image.resize(
@@ -147,25 +244,29 @@ impl Component for Model {
 
                     for page_y in 0..self.pages_height {
                         for page_x in 0..self.pages_width {
-                            let current_pixel_x: u32 =
-                                (page_x as f32 * PAGE_PIXELS_WIDE).floor() as u32;
-                            let current_pixel_y: u32 =
-                                (page_y as f32 * PAGE_PIXELS_TALL).floor() as u32;
+                            let current_pixel_x: u32 = (page_x as f32
+                                * self.paper_size.width_pixels(self.orientation))
+                            .floor() as u32;
+                            let current_pixel_y: u32 = (page_y as f32
+                                * self.paper_size.height_pixels(self.orientation))
+                            .floor() as u32;
 
                             // this is kind of horrific and I'm not sure it does exactly what I want.
                             // for example if you configure 2x2 pages, and the scaled image can't fit
-                            let x_span = if current_pixel_x + (PAGE_PIXELS_WIDE.floor() as u32)
+                            let x_span = if current_pixel_x
+                                + (self.paper_size.width_pixels(self.orientation).floor() as u32)
                                 < scaled_image_width_pixels as u32
                             {
-                                Some(PAGE_PIXELS_WIDE.floor() as u32)
+                                Some(self.paper_size.width_pixels(self.orientation).floor() as u32)
                             } else {
                                 (scaled_image_width_pixels as u32).checked_sub(current_pixel_x)
                             };
 
-                            let y_span = if current_pixel_y + (PAGE_PIXELS_TALL.floor() as u32)
+                            let y_span = if current_pixel_y
+                                + (self.paper_size.height_pixels(self.orientation).floor() as u32)
                                 < scaled_image_height_pixels as u32
                             {
-                                Some(PAGE_PIXELS_TALL.floor() as u32)
+                                Some(self.paper_size.height_pixels(self.orientation).floor() as u32)
                             } else {
                                 (scaled_image_height_pixels as u32).checked_sub(current_pixel_y)
                             };
@@ -275,6 +376,26 @@ impl Component for Model {
 
                 true
             }
+
+            Msg::UpdatePaperSize(s) => {
+                stdweb::console!(log, &s);
+                if let Some(ps) = PaperSize::from_string(s) {
+                    self.paper_size = ps;
+                }
+
+                true
+            }
+
+            Msg::UpdateOrientation(s) => {
+                stdweb::console!(log, &s);
+                match s.as_ref() {
+                    "Portrait" => self.orientation = Orientation::Portrait,
+                    "Landscape" => self.orientation = Orientation::Landscape,
+                    _ => unreachable!(),
+                }
+
+                true
+            }
         }
     }
 
@@ -282,7 +403,12 @@ impl Component for Model {
         html! {
             <div>
                 <div>
-                    { format!("{}in x {}in", PAPER_WIDTH_INCHES * self.pages_width as f32, PAPER_HEIGHT_INCHES * self.pages_height as f32) }
+                    {
+                        format!("{}in x {}in",
+                           self.paper_size.width_inches(self.orientation) * self.pages_width as f32,
+                           self.paper_size.height_inches(self.orientation) * self.pages_height as f32
+                        )
+                    }
                 </div>
 
                 <div>
@@ -298,6 +424,42 @@ impl Component for Model {
                 </div>
 
                 <div>
+                <div>
+                <select name="paper_size" onchange=self.link.callback(|e: ChangeData| {
+                    match e {
+                        ChangeData::Select(s) => {
+                            Msg::UpdatePaperSize(s.value().unwrap())
+                        },
+                        _ => unreachable!()
+                    }
+                })>
+                {
+                    for PaperSize::iterator().map(|paper_size| {
+                        html! {
+                            <option value={ paper_size.to_str() }> { paper_size.to_str() } </option>
+                        }
+                    })
+                }
+                    </select>
+
+
+                </div>
+                <div>
+                <select name="orientation" onchange=self.link.callback(|e: ChangeData| {
+                    match e {
+                        ChangeData::Select(s) => {
+                            Msg::UpdateOrientation(s.value().unwrap())
+                        },
+                        _ => unreachable!()
+                    }
+                })>
+                   <option value={ "Portrait" }> { "Portrait" } </option>
+                   <option value={ "Landscape" }> { "Landscape" } </option>
+                 </select>
+
+
+                </div>
+
                     <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
                         let mut res = vec![];
 
