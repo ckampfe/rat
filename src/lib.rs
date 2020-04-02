@@ -424,41 +424,38 @@ impl Component for Model {
                 </div>
 
                 <div>
-                <div>
-                <select name="paper_size" onchange=self.link.callback(|e: ChangeData| {
-                    match e {
-                        ChangeData::Select(s) => {
-                            Msg::UpdatePaperSize(s.value().unwrap())
-                        },
-                        _ => unreachable!()
-                    }
-                })>
-                {
-                    for PaperSize::iterator().map(|paper_size| {
-                        html! {
-                            <option value={ paper_size.to_str() }> { paper_size.to_str() } </option>
+                    <div>
+                        <select name="paper_size" onchange=self.link.callback(|e: ChangeData| {
+                            match e {
+                                ChangeData::Select(s) => {
+                                    Msg::UpdatePaperSize(s.value().unwrap())
+                                },
+                                _ => unreachable!()
+                            }
+                        })>
+                        {
+                            for PaperSize::iterator().map(|paper_size| {
+                                html! {
+                                    <option value={ paper_size.to_str() }> { paper_size.to_str() } </option>
+                                }
+                            })
                         }
-                    })
-                }
-                    </select>
+                        </select>
+                    </div>
 
-
-                </div>
-                <div>
-                <select name="orientation" onchange=self.link.callback(|e: ChangeData| {
-                    match e {
-                        ChangeData::Select(s) => {
-                            Msg::UpdateOrientation(s.value().unwrap())
-                        },
-                        _ => unreachable!()
-                    }
-                })>
-                   <option value={ "Portrait" }> { "Portrait" } </option>
-                   <option value={ "Landscape" }> { "Landscape" } </option>
-                 </select>
-
-
-                </div>
+                    <div>
+                        <select name="orientation" onchange=self.link.callback(|e: ChangeData| {
+                            match e {
+                                ChangeData::Select(s) => {
+                                    Msg::UpdateOrientation(s.value().unwrap())
+                                },
+                                _ => unreachable!()
+                            }
+                        })>
+                           <option value={ "Portrait" }> { "Portrait" } </option>
+                           <option value={ "Landscape" }> { "Landscape" } </option>
+                        </select>
+                    </div>
 
                     <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
                         let mut res = vec![];
