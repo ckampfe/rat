@@ -198,15 +198,19 @@ impl Component for ImageBackend {
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Self::Message::Rasterize => {
-                let pages_width_pixels = self.props.pages_width as f32
-                    * self.props.paper_size.width_pixels(self.props.orientation);
-                let pages_height_pixels = self.props.pages_height as f32
-                    * self.props.paper_size.height_pixels(self.props.orientation);
+                let paper_width_pixels = self.props.paper_size.width_pixels(self.props.orientation);
+                let pages_width_pixels =
+                    (self.props.pages_width as f32 * paper_width_pixels).ceil() as u32;
+
+                let paper_height_pixels =
+                    self.props.paper_size.height_pixels(self.props.orientation);
+                let pages_height_pixels =
+                    (self.props.pages_height as f32 * paper_height_pixels).ceil() as u32;
 
                 if let Some(image) = &self.props.image.borrow() {
                     let image_scaled_to_fit_on_pages = image.resize(
-                        pages_width_pixels.ceil() as u32,
-                        pages_height_pixels.ceil() as u32,
+                        pages_width_pixels,
+                        pages_height_pixels,
                         image::imageops::Nearest,
                     );
 
@@ -226,49 +230,27 @@ impl Component for ImageBackend {
 
                     for page_y in 0..self.props.pages_height {
                         for page_x in 0..self.props.pages_width {
-                            let current_pixel_x: u32 = (page_x as f32
-                                * self.props.paper_size.width_pixels(self.props.orientation))
-                            .floor() as u32;
-                            let current_pixel_y: u32 = (page_y as f32
-                                * self.props.paper_size.height_pixels(self.props.orientation))
-                            .floor() as u32;
+                            let current_pixel_x: u32 =
+                                (page_x as f32 * paper_width_pixels).floor() as u32;
+                            let current_pixel_y: u32 =
+                                (page_y as f32 * paper_height_pixels).floor() as u32;
 
                             // this is kind of horrific and I'm not sure it does exactly what I want.
                             // for example if you configure 2x2 pages, and the scaled image can't fit
-                            let x_span = if current_pixel_x
-                                + (self
-                                    .props
-                                    .paper_size
-                                    .width_pixels(self.props.orientation)
-                                    .floor() as u32)
-                                < scaled_image_width_pixels as u32
+                            let x_span = if current_pixel_x + (paper_width_pixels.floor() as u32)
+                                < scaled_image_width_pixels
                             {
-                                Some(
-                                    self.props
-                                        .paper_size
-                                        .width_pixels(self.props.orientation)
-                                        .floor() as u32,
-                                )
+                                Some(paper_width_pixels.floor() as u32)
                             } else {
-                                (scaled_image_width_pixels as u32).checked_sub(current_pixel_x)
+                                scaled_image_width_pixels.checked_sub(current_pixel_x)
                             };
 
-                            let y_span = if current_pixel_y
-                                + (self
-                                    .props
-                                    .paper_size
-                                    .height_pixels(self.props.orientation)
-                                    .floor() as u32)
-                                < scaled_image_height_pixels as u32
+                            let y_span = if current_pixel_y + (paper_height_pixels.floor() as u32)
+                                < scaled_image_height_pixels
                             {
-                                Some(
-                                    self.props
-                                        .paper_size
-                                        .height_pixels(self.props.orientation)
-                                        .floor() as u32,
-                                )
+                                Some(paper_height_pixels.floor() as u32)
                             } else {
-                                (scaled_image_height_pixels as u32).checked_sub(current_pixel_y)
+                                scaled_image_height_pixels.checked_sub(current_pixel_y)
                             };
 
                             if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
@@ -287,6 +269,9 @@ impl Component for ImageBackend {
 
                     let mut image_urls = vec![];
 
+                    let square_size = self.props.square_size;
+                    let square_size_floor = self.props.square_size.floor() as u32;
+
                     for page in pages {
                         // create a dupe of this page on which we will draw circles
                         let (page_width_pixels, page_height_pixels) = page.dimensions();
@@ -294,8 +279,6 @@ impl Component for ImageBackend {
                             page_width_pixels,
                             page_height_pixels,
                         );
-
-                        let square_size = self.props.square_size;
 
                         let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
                         let squares_height =
@@ -309,21 +292,19 @@ impl Component for ImageBackend {
                                 let current_pixel_y: u32 =
                                     (square_y as f32 * square_size).floor() as u32;
 
-                                let x_span = if current_pixel_x + (square_size.floor() as u32)
-                                    < page_width_pixels as u32
-                                {
-                                    Some(square_size.floor() as u32)
-                                } else {
-                                    (page_width_pixels as u32).checked_sub(current_pixel_x)
-                                };
+                                let x_span =
+                                    if current_pixel_x + square_size_floor < page_width_pixels {
+                                        Some(square_size_floor)
+                                    } else {
+                                        page_width_pixels.checked_sub(current_pixel_x)
+                                    };
 
-                                let y_span = if current_pixel_y + (square_size.floor() as u32)
-                                    < page_height_pixels as u32
-                                {
-                                    Some(square_size.floor() as u32)
-                                } else {
-                                    (page_height_pixels as u32).checked_sub(current_pixel_y)
-                                };
+                                let y_span =
+                                    if current_pixel_y + (square_size_floor) < page_height_pixels {
+                                        Some(square_size_floor)
+                                    } else {
+                                        page_height_pixels.checked_sub(current_pixel_y)
+                                    };
 
                                 if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
                                     // for a given square, sample the square form the source page
@@ -341,11 +322,9 @@ impl Component for ImageBackend {
                                         .map(|(_, _, pixel)| pixel)
                                         .collect::<Vec<Rgba<u8>>>();
 
-                                    let average_pixel = if self.props.color_depth == ColorDepth::RGB
-                                    {
-                                        average_color(&pixels)
-                                    } else {
-                                        BLACK
+                                    let average_pixel_color = match self.props.color_depth {
+                                        ColorDepth::RGB => average_color(&pixels),
+                                        ColorDepth::Grayscale => BLACK,
                                     };
 
                                     let average_brightness = average_brightness(&pixels);
@@ -362,7 +341,7 @@ impl Component for ImageBackend {
                                         &mut target_page,
                                         circle_center,
                                         radius as i32,
-                                        average_pixel,
+                                        average_pixel_color,
                                     );
                                 }
                             }
@@ -384,6 +363,9 @@ impl Component for ImageBackend {
         }
     }
 
+    // TODO figure out what to do here. Right now we naively rerender on any new props.
+    // The reason for this is because `image: Rc<Option<image::DynamicImage>>`
+    // does not implement `PartialEq`, otherwise we could derive it for the whole props.
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
         self.props = props;
         true
@@ -405,7 +387,7 @@ impl Component for ImageBackend {
                             <div style="display: inline;">
                                 <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
                                 <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"}></img>
-                                </div>
+                            </div>
                         }
                     })
                 }
