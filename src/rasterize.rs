@@ -18,7 +18,7 @@ pub struct RasterizeArgs<'a> {
     pub max_radius: f32,
 }
 
-pub fn rasterize(args: RasterizeArgs) -> Vec<SubImage<Box<DynamicImage>>> {
+pub fn rasterize(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     let image = args.image;
     let pages_width = args.pages_width;
     let pages_height = args.pages_height;
@@ -31,7 +31,7 @@ pub fn rasterize(args: RasterizeArgs) -> Vec<SubImage<Box<DynamicImage>>> {
     let pages_width_pixels = (pages_width as f32 * paper_width_pixels).ceil() as u32;
     let pages_height_pixels = (pages_height as f32 * paper_height_pixels).ceil() as u32;
 
-    let mut pages_as_subimages: Vec<SubImage<Box<DynamicImage>>> = Vec::with_capacity(
+    let mut rasterized_pages = Vec::with_capacity(
         (pages_width * pages_height)
             .try_into()
             .expect("pages_width * pages_height was not able to fit into a usize!"),
@@ -157,14 +157,10 @@ pub fn rasterize(args: RasterizeArgs) -> Vec<SubImage<Box<DynamicImage>>> {
             }
         }
 
-        let page = Box::new(DynamicImage::ImageRgba8(target_page));
-        let target_page_as_subimage: SubImage<Box<DynamicImage>> =
-            SubImage::new(page, 0, 0, page_width_pixels, page_height_pixels);
-
-        pages_as_subimages.push(target_page_as_subimage);
+        rasterized_pages.push(target_page);
     }
 
-    pages_as_subimages
+    rasterized_pages
 }
 
 fn average_color(pixels: &[Rgba<u8>]) -> Rgba<u8> {

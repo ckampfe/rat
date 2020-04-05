@@ -2,7 +2,7 @@
 
 mod rasterize;
 
-use image::GenericImageView;
+use image::{ImageBuffer, Rgba};
 use rasterize::{ColorDepth, Orientation, PaperSize, RESOLUTION};
 use std::borrow::Borrow;
 use std::fmt;
@@ -471,13 +471,13 @@ impl Component for Model {
     }
 }
 
-fn image_to_object_url(image: image::SubImage<Box<image::DynamicImage>>) -> String {
+fn image_to_object_url(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> String {
     let (x, y) = image.dimensions();
 
     let mut w = std::io::Cursor::new(Vec::new());
     let as_png = image::png::PNGEncoder::new(&mut w);
 
-    let page_as_bytes = image.to_image().into_raw();
+    let page_as_bytes = image.into_raw();
 
     as_png
         .encode(&page_as_bytes, x, y, image::ColorType::Rgba8)
