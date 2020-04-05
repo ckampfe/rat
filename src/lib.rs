@@ -2,6 +2,7 @@
 
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, SubImage};
 use std::borrow::Borrow;
+use std::fmt;
 use std::rc::Rc;
 use std::slice::Iter;
 use stdweb::js;
@@ -83,8 +84,8 @@ impl PaperSize {
     }
 }
 
-impl std::fmt::Display for PaperSize {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for PaperSize {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             PaperSize::USLetter => "US Letter",
             PaperSize::A4 => "A4",
@@ -118,8 +119,8 @@ enum Orientation {
     Landscape,
 }
 
-impl std::fmt::Display for Orientation {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Orientation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             Orientation::Portrait => "Portrait",
             Orientation::Landscape => "Landscape",
@@ -134,8 +135,8 @@ enum Backend {
     SVG,
 }
 
-impl std::fmt::Display for Backend {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Backend {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             Backend::Image => "Image",
             Backend::SVG => "SVG",
@@ -150,8 +151,8 @@ enum ColorDepth {
     Grayscale,
 }
 
-impl std::fmt::Display for ColorDepth {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for ColorDepth {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             ColorDepth::RGB => "RGB",
             ColorDepth::Grayscale => "Grayscale",
