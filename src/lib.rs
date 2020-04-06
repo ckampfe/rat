@@ -1,5 +1,7 @@
 #![recursion_limit = "1024"]
 
+const RAT_VERSION: &str = env!("RAT_VERSION");
+
 mod rasterize;
 
 use image::{ImageBuffer, Rgba};
@@ -91,6 +93,7 @@ impl Component for ImageBackend {
                         return performance.now()
                     };
                     let subimages = rasterize::rasterize(args);
+
                     let runtime = stdweb::js! {
                         return performance.now() - @{start}
                     };
@@ -127,9 +130,9 @@ impl Component for ImageBackend {
             <div>
                 <div>
                     <button onclick=self.link.callback(|_| Self::Message::Rasterize)>
-                { "Rasterize" }
-                </button>
-            </div>
+                        { "Rasterize" }
+                     </button>
+                </div>
 
                 <div>
                 {
@@ -310,7 +313,7 @@ impl Component for Model {
     fn view(&self) -> Html {
         html! {
             <div>
-                <a href="https://github.com/ckampfe/rat">{ "source code" }</a>
+                <a href="https://github.com/ckampfe/rat">{ format!("source code version {}", RAT_VERSION) }</a>
                 <div>
                     {
                         format!("{}in x {}in",
