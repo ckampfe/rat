@@ -87,7 +87,14 @@ impl Component for ImageBackend {
                         max_radius: self.props.max_radius,
                     };
 
+                    let start = stdweb::js! {
+                        return performance.now()
+                    };
                     let subimages = rasterize::rasterize(args);
+                    let runtime = stdweb::js! {
+                        return performance.now() - @{start}
+                    };
+                    stdweb::console!(log, runtime);
 
                     let mut image_urls: Vec<String> = vec![];
 
