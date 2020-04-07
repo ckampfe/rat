@@ -13,6 +13,7 @@ use stdweb::js;
 use stdweb::web::File;
 use yew::services::reader::{FileData, ReaderTask};
 use yew::services::ReaderService;
+use yew::virtual_dom::VNode;
 use yew::{
     html, html::ChangeData, Component, ComponentLink, Html, InputData, Properties, ShouldRender,
 };
@@ -147,6 +148,150 @@ impl Component for ImageBackend {
                 }
                 </div>
             </div>
+        }
+    }
+}
+
+struct SVGBackend {
+    link: ComponentLink<Self>,
+    props: SVGBackendProps,
+    image_urls: Vec<String>,
+    svg: Option<svg::Document>,
+}
+
+pub enum SVGBackendMsg {
+    Rasterize,
+}
+
+#[derive(Clone, Properties)]
+struct SVGBackendProps {
+    pages_width: u32,
+    pages_height: u32,
+    image: Rc<Option<image::DynamicImage>>,
+    raster_size: f32,
+    max_radius: f32,
+    square_size: f32,
+    paper_size: PaperSize,
+    orientation: Orientation,
+    color_depth: ColorDepth,
+}
+
+impl Component for SVGBackend {
+    type Message = SVGBackendMsg;
+    type Properties = SVGBackendProps;
+
+    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+        SVGBackend {
+            link,
+            props,
+            image_urls: vec![],
+            svg: None,
+        }
+    }
+
+    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+        match msg {
+            Self::Message::Rasterize => {
+                if let Some(image) = self.props.image.borrow() {
+                    stdweb::console!(log, "Starting rasterization");
+                    let paper_width_pixels =
+                        self.props.paper_size.width_pixels(self.props.orientation);
+                    let paper_height_pixels =
+                        self.props.paper_size.height_pixels(self.props.orientation);
+
+                    let args = rasterize::RasterizeArgs {
+                        image,
+                        paper_width_pixels,
+                        paper_height_pixels,
+                        pages_width: self.props.pages_width,
+                        pages_height: self.props.pages_height,
+                        square_size: self.props.square_size,
+                        color_depth: self.props.color_depth,
+                        max_radius: self.props.max_radius,
+                    };
+
+                    let start = stdweb::js! {
+                        return performance.now()
+                    };
+
+                    let svg = rasterize::rasterize_svg(args);
+
+                    let runtime = stdweb::js! {
+                        return performance.now() - @{start}
+                    };
+                    stdweb::console!(log, runtime);
+
+                    let mut svg_string = Vec::new();
+                    svg::write(&mut svg_string, &svg).unwrap();
+                    let s = String::from_utf8(svg_string).unwrap();
+                    self.image_urls = vec![svg_to_object_url(&s)];
+                    self.svg = Some(svg);
+
+                    true
+                } else {
+                    stdweb::console!(log, "No image supplied, not rasterizeing anything");
+                    false
+                }
+            }
+        }
+    }
+
+    // TODO figure out what to do here. Right now we naively rerender on any new props.
+    // The reason for this is because `image: Rc<Option<image::DynamicImage>>`
+    // does not implement `PartialEq`, otherwise we could derive it for the whole props.
+    fn change(&mut self, props: Self::Properties) -> ShouldRender {
+        self.props = props;
+        true
+    }
+
+    // See https://github.com/yewstack/yew/blob/master/examples/std_web/inner_html/src/lib.rs
+    // for reference as to why this is this way
+    fn view(&self) -> Html {
+        if self.svg.is_some() {
+            // let mut svg_string = Vec::new();
+            // svg::write(&mut svg_string, svg).unwrap();
+            // let s = String::from_utf8(svg_string).unwrap();
+            let s = &self.image_urls[0];
+            let node = stdweb::web::Node::from_html(s).unwrap();
+            let vnode = VNode::VRef(node);
+
+            html! {
+                <div>
+                    <div>
+                        <button onclick=self.link.callback(|_| Self::Message::Rasterize)>
+                            { "Rasterize" }
+                        </button>
+                    </div>
+                    <div>
+                        <div>
+                            { vnode }
+                        </div>
+                    </div>
+                    <div>
+                {
+                    for self.image_urls.iter().map(|image_url| {
+                        html! {
+                            <div style="display: inline;">
+                                <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
+                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"}></img>
+                                </div>
+                        }
+                    })
+                }
+                </div>
+
+                </div>
+            }
+        } else {
+            html! {
+                <div>
+                    <div>
+                        <button onclick=self.link.callback(|_| Self::Message::Rasterize)>
+                            { "Rasterize" }
+                        </button>
+                    </div>
+                </div>
+            }
         }
     }
 }
@@ -382,9 +527,7 @@ impl Component for Model {
                             }
                         })>
                             <option value={ Backend::Image.to_string() }> { Backend::Image.to_string() } </option>
-                            // TODO: SVG BACKEND
-                            // <option value={ Backend::SVG.to_string() }> { Backend::SVG.to_string() } </option>
-                            <option value={ Backend::Image.to_string() }> { "SVG backend coming soon!" } </option>
+                            <option value={ Backend::SVG.to_string() }> { Backend::SVG.to_string() } </option>
                         </select>
                     </div>
 
@@ -460,20 +603,21 @@ impl Component for Model {
                                 />
                             }
                         },
-                        _ => unreachable!("SVG backend not yet implemented!")
-                        // TODO: SVG backend
-                        // Backend::SVG => {
-                        //     html! {
-                        //         <SVGBackend
-                        //             image={self.image.clone()}
-                        //             max_radius={self.max_radius}
-                        //             orientation={self.orientation}
-                        //             pages_height={self.pages_height}
-                        //             pages_width={self.pages_width}
-                        //             paper_size={self.paper_size}
-                        //             raster_size={self.raster_size}
-                        //             square_size={self.square_size}
-                        //         />
+                        Backend::SVG => {
+                            html! {
+                                <SVGBackend
+                                    image={self.image.clone()}
+                                    max_radius={self.max_radius}
+                                    orientation={self.orientation}
+                                    pages_height={self.pages_height}
+                                    pages_width={self.pages_width}
+                                    paper_size={self.paper_size}
+                                    raster_size={self.raster_size}
+                                    square_size={self.square_size}
+                                    color_depth={self.color_depth}
+                                />
+                            }
+                        }
                     }
                 }
             </div>
@@ -500,6 +644,19 @@ fn image_to_object_url(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> String {
     let blob_url: stdweb::Value = stdweb::js! {
         const slice = @{png_slice};
         const blob = new Blob([slice], { type: "image/png" });
+        const imageUrl = URL.createObjectURL(blob);
+        return imageUrl
+    };
+
+    blob_url.into_string().unwrap()
+}
+
+fn svg_to_object_url(s: &str) -> String {
+    // https://docs.rs/stdweb/0.4.20/stdweb/struct.UnsafeTypedArray.html
+    let svg_slice = unsafe { stdweb::UnsafeTypedArray::new(s.as_bytes()) };
+    let blob_url: stdweb::Value = stdweb::js! {
+        const slice = @{svg_slice};
+        const blob = new Blob([slice], { type: "image/svg+xml" });
         const imageUrl = URL.createObjectURL(blob);
         return imageUrl
     };

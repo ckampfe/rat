@@ -171,6 +171,164 @@ pub fn rasterize(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     output_pages
 }
 
+pub fn rasterize_svg(args: RasterizeArgs) -> svg::Document {
+    let image = args.image;
+    let pages_width = args.pages_width;
+    let pages_height = args.pages_height;
+    let paper_width_pixels = args.paper_width_pixels;
+    let paper_height_pixels = args.paper_height_pixels;
+    let square_size = args.square_size;
+    let half_square_size = (square_size / 2.0).floor() as i32;
+    let square_size_floor = square_size.floor() as u32;
+    // let color_depth = args.color_depth;
+    let max_radius = args.max_radius;
+    let pages_width_pixels = (pages_width as f32 * paper_width_pixels).ceil() as u32;
+    let pages_height_pixels = (pages_height as f32 * paper_height_pixels).ceil() as u32;
+
+    let image_scaled_to_fit_on_pages = image.resize(
+        pages_width_pixels,
+        pages_height_pixels,
+        image::imageops::Nearest,
+    );
+
+    let (scaled_image_width_pixels, scaled_image_height_pixels) =
+        image_scaled_to_fit_on_pages.dimensions();
+
+    stdweb::console!(
+        log,
+        "dimensions of scaled image:",
+        scaled_image_width_pixels,
+        scaled_image_height_pixels
+    );
+
+    let mut pages_pairs = Vec::with_capacity(
+        (pages_width * pages_height)
+            .try_into()
+            .expect("pages_width * pages_height was not able to fit into a usize!"),
+    );
+
+    for page_y in 0..pages_height {
+        for page_x in 0..pages_width {
+            pages_pairs.push((page_x, page_y));
+        }
+    }
+
+    // let mut output_pages = Vec::with_capacity(pages_pairs.len());
+
+    let mut svg_document = svg::Document::new();
+    svg_document = svg_document.set(
+        "viewBox",
+        (0, 0, scaled_image_width_pixels, scaled_image_height_pixels),
+    );
+
+    // calculate pages, left-right top-bottom
+    // each page is its own sub image
+    let pages = pages_pairs.into_iter().filter_map(|(page_x, page_y)| {
+        let current_pixel_x: u32 = (page_x as f32 * paper_width_pixels).floor() as u32;
+        let current_pixel_y: u32 = (page_y as f32 * paper_height_pixels).floor() as u32;
+
+        // this is kind of horrific and I'm not sure it does exactly what I want.
+        // for example if you configure 2x2 pages, and the scaled image can't fit
+        let x_span =
+            if current_pixel_x + (paper_width_pixels.floor() as u32) < scaled_image_width_pixels {
+                Some(paper_width_pixels.floor() as u32)
+            } else {
+                scaled_image_width_pixels.checked_sub(current_pixel_x)
+            };
+
+        let y_span = if current_pixel_y + (paper_height_pixels.floor() as u32)
+            < scaled_image_height_pixels
+        {
+            Some(paper_height_pixels.floor() as u32)
+        } else {
+            scaled_image_height_pixels.checked_sub(current_pixel_y)
+        };
+
+        if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
+            let page = SubImage::new(
+                &image_scaled_to_fit_on_pages,
+                current_pixel_x,
+                current_pixel_y,
+                x_span,
+                y_span,
+            );
+
+            Some(page)
+        } else {
+            None
+        }
+    });
+
+    let mut pixels_in_square = Vec::with_capacity(square_size.powi(2).ceil() as usize);
+
+    for page in pages {
+        // create a dupe of this page on which we will draw circles
+        let (page_width_pixels, page_height_pixels) = page.dimensions();
+
+        let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
+        let squares_height = (page_height_pixels as f32 / square_size).ceil() as u32;
+
+        // divide into squares
+        for square_y in 0..squares_height {
+            for square_x in 0..squares_width {
+                let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
+                let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
+
+                let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
+                    Some(square_size_floor)
+                } else {
+                    page_width_pixels.checked_sub(current_pixel_x)
+                };
+
+                let y_span = if current_pixel_y + (square_size_floor) < page_height_pixels {
+                    Some(square_size_floor)
+                } else {
+                    page_height_pixels.checked_sub(current_pixel_y)
+                };
+
+                // if the span is nonzero and within the boundary
+                if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
+                    // for a given square, sample the square form the source page
+                    // getting radius and color
+                    let square =
+                        SubImage::new(&page, current_pixel_x, current_pixel_y, x_span, y_span);
+
+                    pixels_in_square.clear();
+                    pixels_in_square.extend(square.pixels().map(|(_, _, pixel)| pixel));
+
+                    // TODO figure out how to add fill color to SVG
+                    /*
+                    let average_pixel_color = match color_depth {
+                        ColorDepth::RGB => average_color(&pixels_in_square),
+                        ColorDepth::Grayscale => BLACK,
+                    };
+                    */
+
+                    let average_brightness = average_brightness(&pixels_in_square);
+
+                    let radius = radius(average_brightness, max_radius);
+
+                    // write the sampling as a circle to the target page
+                    let circle_center = (
+                        current_pixel_x as i32 + half_square_size,
+                        current_pixel_y as i32 + half_square_size,
+                    );
+
+                    // <circle cx="50" cy="50" r="50"/>
+                    let mut circle = svg::node::element::Circle::new();
+                    circle = circle.set("cx", circle_center.0);
+                    circle = circle.set("cy", circle_center.1);
+                    circle = circle.set("r", radius);
+
+                    svg_document = svg_document.add(circle);
+                }
+            }
+        }
+    }
+
+    svg_document
+}
+
 fn average_color(pixels: &[Rgba<u8>]) -> Rgba<u8> {
     let mut r: usize = pixels[0][0] as usize;
     let mut g: usize = pixels[0][1] as usize;
