@@ -10,8 +10,7 @@ fn main() {
     // this is how you pass an env var to Cargo at build time:
     // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-env
     println!(
-        "cargo:rustc-env={}={}",
-        "RAT_VERSION",
+        "cargo:rustc-env=RAT_VERSION={}",
         std::str::from_utf8(&version.stdout).unwrap()
     );
 }
