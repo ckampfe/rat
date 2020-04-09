@@ -24,4 +24,5 @@ In `target/deploy`:
 - [x] svg backend
 - [ ] way to make the thing not block while it renders, if possible
 - [ ] any kind of perf optimization at all
+- [ ] investigate converting to `web-sys` from `stdweb`
 - [ ] `wee_alloc` (https://rustwasm.github.io/book/game-of-life/code-size.html)
