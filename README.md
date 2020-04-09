@@ -21,7 +21,7 @@ In `target/deploy`:
 
 - [ ] styling/UX
 - [ ] zip all files for download, "download all" link
-- [ ] svg backend
+- [x] svg backend
 - [ ] way to make the thing not block while it renders, if possible
 - [ ] any kind of perf optimization at all
 - [ ] `wee_alloc` (https://rustwasm.github.io/book/game-of-life/code-size.html)
