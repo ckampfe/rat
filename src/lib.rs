@@ -13,7 +13,6 @@ use stdweb::js;
 use stdweb::web::File;
 use yew::services::reader::{FileData, ReaderTask};
 use yew::services::ReaderService;
-use yew::virtual_dom::VNode;
 use yew::{
     html, html::ChangeData, Component, ComponentLink, Html, InputData, Properties, ShouldRender,
 };
@@ -93,7 +92,7 @@ impl Component for ImageBackend {
                     let start = stdweb::js! {
                         return performance.now()
                     };
-                    let subimages = rasterize::rasterize(args);
+                    let subimages = rasterize::rasterize_image(args);
 
                     let runtime = stdweb::js! {
                         return performance.now() - @{start}
@@ -156,7 +155,7 @@ struct SVGBackend {
     link: ComponentLink<Self>,
     props: SVGBackendProps,
     image_urls: Vec<String>,
-    svg: Option<svg::Document>,
+    svgs: Vec<svg::Document>,
 }
 
 pub enum SVGBackendMsg {
@@ -185,7 +184,7 @@ impl Component for SVGBackend {
             link,
             props,
             image_urls: vec![],
-            svg: None,
+            svgs: vec![],
         }
     }
 
@@ -214,18 +213,26 @@ impl Component for SVGBackend {
                         return performance.now()
                     };
 
-                    let svg = rasterize::rasterize_svg(args);
+                    let svgs = rasterize::rasterize_svg(args);
 
                     let runtime = stdweb::js! {
                         return performance.now() - @{start}
                     };
                     stdweb::console!(log, runtime);
 
-                    let mut svg_string = Vec::new();
-                    svg::write(&mut svg_string, &svg).unwrap();
-                    let s = String::from_utf8(svg_string).unwrap();
-                    self.image_urls = vec![svg_to_object_url(&s)];
-                    self.svg = Some(svg);
+                    let image_urls = svgs
+                        .iter()
+                        .map(|svg| {
+                            let mut svg_string = Vec::new();
+                            svg::write(&mut svg_string, svg).unwrap();
+                            let s = String::from_utf8(svg_string).unwrap();
+                            svg_to_object_url(&s)
+                        })
+                        .collect::<Vec<String>>();
+
+                    self.image_urls = image_urls;
+
+                    self.svgs = svgs;
 
                     true
                 } else {
@@ -247,14 +254,7 @@ impl Component for SVGBackend {
     // See https://github.com/yewstack/yew/blob/master/examples/std_web/inner_html/src/lib.rs
     // for reference as to why this is this way
     fn view(&self) -> Html {
-        if self.svg.is_some() {
-            // let mut svg_string = Vec::new();
-            // svg::write(&mut svg_string, svg).unwrap();
-            // let s = String::from_utf8(svg_string).unwrap();
-            let s = &self.image_urls[0];
-            let node = stdweb::web::Node::from_html(s).unwrap();
-            let vnode = VNode::VRef(node);
-
+        if self.svgs.len() > 0 {
             html! {
                 <div>
                     <div>
@@ -263,18 +263,13 @@ impl Component for SVGBackend {
                         </button>
                     </div>
                     <div>
-                        <div>
-                            { vnode }
-                        </div>
-                    </div>
-                    <div>
                 {
                     for self.image_urls.iter().map(|image_url| {
                         html! {
                             <div style="display: inline;">
                                 <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
                                 <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"}></img>
-                                </div>
+                            </div>
                         }
                     })
                 }

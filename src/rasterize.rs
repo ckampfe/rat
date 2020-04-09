@@ -18,7 +18,7 @@ pub struct RasterizeArgs<'a> {
     pub max_radius: f32,
 }
 
-pub fn rasterize(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     let image = args.image;
     let pages_width = args.pages_width;
     let pages_height = args.pages_height;
@@ -171,7 +171,7 @@ pub fn rasterize(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     output_pages
 }
 
-pub fn rasterize_svg(args: RasterizeArgs) -> svg::Document {
+pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
     let image = args.image;
     let pages_width = args.pages_width;
     let pages_height = args.pages_height;
@@ -213,13 +213,7 @@ pub fn rasterize_svg(args: RasterizeArgs) -> svg::Document {
         }
     }
 
-    // let mut output_pages = Vec::with_capacity(pages_pairs.len());
-
-    let mut svg_document = svg::Document::new();
-    svg_document = svg_document.set(
-        "viewBox",
-        (0, 0, scaled_image_width_pixels, scaled_image_height_pixels),
-    );
+    let mut output_documents = Vec::with_capacity(pages_pairs.len());
 
     // calculate pages, left-right top-bottom
     // each page is its own sub image
@@ -264,6 +258,9 @@ pub fn rasterize_svg(args: RasterizeArgs) -> svg::Document {
     for page in pages {
         // create a dupe of this page on which we will draw circles
         let (page_width_pixels, page_height_pixels) = page.dimensions();
+
+        let mut svg_document = svg::Document::new();
+        svg_document = svg_document.set("viewBox", (0, 0, page_width_pixels, page_height_pixels));
 
         let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
         let squares_height = (page_height_pixels as f32 / square_size).ceil() as u32;
@@ -315,18 +312,20 @@ pub fn rasterize_svg(args: RasterizeArgs) -> svg::Document {
                     );
 
                     // <circle cx="50" cy="50" r="50"/>
-                    let mut circle = svg::node::element::Circle::new();
-                    circle = circle.set("cx", circle_center.0);
-                    circle = circle.set("cy", circle_center.1);
-                    circle = circle.set("r", radius);
+                    let circle = svg::node::element::Circle::new()
+                        .set("cx", circle_center.0)
+                        .set("cy", circle_center.1)
+                        .set("r", radius);
 
                     svg_document = svg_document.add(circle);
                 }
             }
         }
+
+        output_documents.push(svg_document);
     }
 
-    svg_document
+    output_documents
 }
 
 fn average_color(pixels: &[Rgba<u8>]) -> Rgba<u8> {
