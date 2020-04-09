@@ -254,7 +254,7 @@ impl Component for SVGBackend {
     // See https://github.com/yewstack/yew/blob/master/examples/std_web/inner_html/src/lib.rs
     // for reference as to why this is this way
     fn view(&self) -> Html {
-        if self.svgs.len() > 0 {
+        if !self.svgs.is_empty() {
             html! {
                 <div>
                     <div>
