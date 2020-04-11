@@ -501,6 +501,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "podio"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "780fb4b6698bbf9cf2444ea5d22411cef2953f0824b98f33cf454ec5615645bd"
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -596,6 +602,7 @@ dependencies = [
  "stdweb",
  "svg",
  "yew",
+ "zip",
 ]
 
 [[package]]
@@ -930,4 +937,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "zip"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6df134e83b8f0f8153a094c7b0fd79dfebe437f1d76e7715afa18ed95ebe2fd7"
+dependencies = [
+ "crc32fast",
+ "podio",
 ]

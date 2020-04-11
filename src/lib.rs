@@ -8,6 +8,7 @@ use image::{ImageBuffer, Rgba};
 use rasterize::{ColorDepth, Orientation, PaperSize, RESOLUTION};
 use std::borrow::Borrow;
 use std::fmt;
+use std::io::{Cursor, Seek, Write};
 use std::rc::Rc;
 use stdweb::js;
 use stdweb::web::File;
@@ -16,6 +17,23 @@ use yew::services::ReaderService;
 use yew::{
     html, html::ChangeData, Component, ComponentLink, Html, InputData, Properties, ShouldRender,
 };
+
+enum MimeType {
+    PNG,
+    SVG,
+    ZIP,
+}
+
+impl fmt::Display for MimeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match self {
+            MimeType::PNG => "image/png",
+            MimeType::SVG => "image/svg+xml",
+            MimeType::ZIP => "application/zip",
+        };
+        write!(f, "{}", s)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Backend {
@@ -37,6 +55,7 @@ struct ImageBackend {
     link: ComponentLink<Self>,
     props: ImageBackendProps,
     image_urls: Vec<String>,
+    zip_url: Option<String>,
 }
 
 pub enum ImageBackendMsg {
@@ -65,6 +84,7 @@ impl Component for ImageBackend {
             link,
             props,
             image_urls: vec![],
+            zip_url: None,
         }
     }
 
@@ -99,14 +119,37 @@ impl Component for ImageBackend {
                     };
                     stdweb::console!(log, runtime);
 
-                    let mut image_urls: Vec<String> = vec![];
+                    let mut pngs = vec![];
+                    let mut image_urls = vec![];
+                    let mut zip_inputs = vec![];
 
-                    for target_page_as_subimage in subimages {
-                        let blob_url_str = image_to_object_url(target_page_as_subimage);
+                    // encode image buffers as pngs
+                    for image in subimages {
+                        let png = encode_image_as_png_bytes(image);
+                        pngs.push(png);
+                    }
+
+                    // get image urls for each png so we can display them
+                    // on the page
+                    for png in pngs.iter() {
+                        let blob_url_str = bytes_to_object_url(&png, MimeType::PNG);
                         image_urls.push(blob_url_str);
                     }
 
                     self.image_urls = image_urls;
+
+                    // zip up all pngs so we can provide the
+                    // "download all" link
+                    for (i, png) in pngs.into_iter().enumerate() {
+                        let filename = format!("{}.png", i + 1);
+                        zip_inputs.push((filename, png));
+                    }
+
+                    let mut zip_buf = Cursor::new(vec![]);
+                    let _zipped_result = zip(&mut zip_buf, zip_inputs);
+                    let zip_url = bytes_to_object_url(zip_buf.get_ref(), MimeType::ZIP);
+
+                    self.zip_url = Some(zip_url);
 
                     true
                 } else {
@@ -136,6 +179,18 @@ impl Component for ImageBackend {
 
                 <div>
                 {
+                    if let Some(zip_url) = &self.zip_url {
+                        html! {
+                            <a style="display: inline;" href={format!("{}", zip_url)} alt={"download all"}>{"download all"}</a>
+                        }
+                    } else {
+                        html! {}
+                    }
+                }
+                </div>
+
+                <div>
+                {
                     for self.image_urls.iter().map(|image_url| {
                         html! {
                             <div style="display: inline;">
@@ -155,7 +210,7 @@ struct SVGBackend {
     link: ComponentLink<Self>,
     props: SVGBackendProps,
     image_urls: Vec<String>,
-    svgs: Vec<svg::Document>,
+    zip_url: Option<String>,
 }
 
 pub enum SVGBackendMsg {
@@ -184,7 +239,7 @@ impl Component for SVGBackend {
             link,
             props,
             image_urls: vec![],
-            svgs: vec![],
+            zip_url: None,
         }
     }
 
@@ -226,13 +281,28 @@ impl Component for SVGBackend {
                             let mut svg_string = Vec::new();
                             svg::write(&mut svg_string, svg).unwrap();
                             let s = String::from_utf8(svg_string).unwrap();
-                            svg_to_object_url(&s)
+                            bytes_to_object_url(s.as_bytes(), MimeType::SVG)
                         })
                         .collect::<Vec<String>>();
 
                     self.image_urls = image_urls;
 
-                    self.svgs = svgs;
+                    let mut zip_inputs = vec![];
+
+                    // zip up all svgs so we can provide the
+                    // "download all" link
+                    for (i, svg) in svgs.iter().enumerate() {
+                        let filename = format!("{}.svg", i + 1);
+                        let mut svg_string: Vec<u8> = Vec::new();
+                        svg::write(&mut svg_string, svg).unwrap();
+                        zip_inputs.push((filename, svg_string));
+                    }
+
+                    let mut zip_buf = Cursor::new(vec![]);
+                    let _zipped_result = zip(&mut zip_buf, zip_inputs);
+                    let zip_url = bytes_to_object_url(zip_buf.get_ref(), MimeType::ZIP);
+
+                    self.zip_url = Some(zip_url);
 
                     true
                 } else {
@@ -254,7 +324,7 @@ impl Component for SVGBackend {
     // See https://github.com/yewstack/yew/blob/master/examples/std_web/inner_html/src/lib.rs
     // for reference as to why this is this way
     fn view(&self) -> Html {
-        if !self.svgs.is_empty() {
+        if !self.image_urls.is_empty() {
             html! {
                 <div>
                     <div>
@@ -262,6 +332,21 @@ impl Component for SVGBackend {
                             { "Rasterize" }
                         </button>
                     </div>
+
+                    <div>
+                {
+                    if let Some(zip_url) = &self.zip_url {
+                        html! {
+
+                            <a style="display: inline;" href={format!("{}", zip_url)} alt={"download all"}>{"download all"}</a>
+                        }
+                    } else {
+                        html! {}
+                    }
+                }
+                    </div>
+
+
                     <div>
                 {
                     for self.image_urls.iter().map(|image_url| {
@@ -620,10 +705,29 @@ impl Component for Model {
     }
 }
 
-fn image_to_object_url(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> String {
+fn zip<'a, W: Write + Seek>(
+    writer: &mut W,
+    files: Vec<(String, Vec<u8>)>,
+) -> zip::result::ZipResult<()> {
+    let mut zip = zip::ZipWriter::new(writer);
+
+    let options =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    for (filename, bytes) in files {
+        zip.start_file(filename, options)?;
+        zip.write(&bytes)?;
+    }
+
+    zip.finish()?;
+
+    Ok(())
+}
+
+fn encode_image_as_png_bytes(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> Vec<u8> {
     let (x, y) = image.dimensions();
 
-    let mut w = std::io::Cursor::new(Vec::new());
+    let mut w = Cursor::new(Vec::new());
     let as_png = image::png::PNGEncoder::new(&mut w);
 
     let page_as_bytes = image.into_raw();
@@ -632,26 +736,17 @@ fn image_to_object_url(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> String {
         .encode(&page_as_bytes, x, y, image::ColorType::Rgba8)
         .unwrap();
 
-    let png_bytes = w.into_inner();
-
-    // https://docs.rs/stdweb/0.4.20/stdweb/struct.UnsafeTypedArray.html
-    let png_slice = unsafe { stdweb::UnsafeTypedArray::new(&png_bytes) };
-    let blob_url: stdweb::Value = stdweb::js! {
-        const slice = @{png_slice};
-        const blob = new Blob([slice], { type: "image/png" });
-        const imageUrl = URL.createObjectURL(blob);
-        return imageUrl
-    };
-
-    blob_url.into_string().unwrap()
+    w.into_inner()
 }
 
-fn svg_to_object_url(s: &str) -> String {
+/// The types we use in this app are:
+/// image/png, image/svg+xml, and application/zip
+fn bytes_to_object_url(bytes: &[u8], mime_type: MimeType) -> String {
     // https://docs.rs/stdweb/0.4.20/stdweb/struct.UnsafeTypedArray.html
-    let svg_slice = unsafe { stdweb::UnsafeTypedArray::new(s.as_bytes()) };
+    let slice = unsafe { stdweb::UnsafeTypedArray::new(&bytes) };
     let blob_url: stdweb::Value = stdweb::js! {
-        const slice = @{svg_slice};
-        const blob = new Blob([slice], { type: "image/svg+xml" });
+        const slice = @{slice};
+        const blob = new Blob([slice], { type: @{mime_type.to_string()}});
         const imageUrl = URL.createObjectURL(blob);
         return imageUrl
     };

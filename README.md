@@ -20,7 +20,7 @@ In `target/deploy`:
 # todo
 
 - [ ] styling/UX
-- [ ] zip all files for download, "download all" link
+- [x] zip all files for download, "download all" link
 - [x] svg backend
 - [ ] way to make the thing not block while it renders, if possible
 - [ ] any kind of perf optimization at all
