@@ -154,7 +154,7 @@ impl Component for ImageBackend {
 
                     true
                 } else {
-                    stdweb::console!(log, "No image supplied, not rasterizeing anything");
+                    stdweb::console!(log, "No image supplied, not rasterizing anything");
                     false
                 }
             }
