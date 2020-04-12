@@ -724,9 +724,9 @@ impl Component for Model {
                     name="max-raster-perc"
                     value={(self.max_radius_percentage * 100.0).floor() as usize}
                     oninput=self.link.callback(|e: InputData| Msg::UpdateMaxRadiusPercentage(e.value))/>
+                <span>{(self.max_radius_percentage * 100.0).floor() as usize}</span>
 
                 </div>
-                <span>{(self.max_radius_percentage * 100.0).floor() as usize}</span>
 
                 {
                     match self.backend {
