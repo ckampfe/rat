@@ -4,7 +4,6 @@ use std::fmt;
 use std::slice::Iter;
 
 pub const PIXELS_PER_INCH: f32 = 72.0;
-pub const RESOLUTION: f32 = 144.0;
 const BLACK: Rgba<u8> = Rgba([0, 0, 0, 255]);
 
 pub struct RasterizeArgs<'a> {
@@ -14,8 +13,9 @@ pub struct RasterizeArgs<'a> {
     pub pages_width: u32,
     pub pages_height: u32,
     pub square_size: f32,
+    pub min_radius_percentage: f32,
+    pub max_radius_percentage: f32,
     pub color_depth: ColorDepth,
-    pub max_radius: f32,
 }
 
 pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> {
@@ -24,11 +24,15 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
     let pages_height = args.pages_height;
     let paper_width_pixels = args.paper_width_pixels;
     let paper_height_pixels = args.paper_height_pixels;
+    let min_radius_percentage = args.min_radius_percentage;
+    let max_radius_percentage = args.max_radius_percentage;
     let square_size = args.square_size;
+    let max_radius = max_radius(square_size);
+    let adjusted_max_radius = max_radius * max_radius_percentage;
+    let adjusted_min_radius = max_radius * min_radius_percentage;
     let half_square_size = (square_size / 2.0).floor() as i32;
     let square_size_floor = square_size.floor() as u32;
     let color_depth = args.color_depth;
-    let max_radius = args.max_radius;
     let pages_width_pixels = (pages_width as f32 * paper_width_pixels).ceil() as u32;
     let pages_height_pixels = (pages_height as f32 * paper_height_pixels).ceil() as u32;
 
@@ -146,7 +150,8 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
 
                     let average_brightness = average_brightness(&pixels_in_square);
 
-                    let radius = radius(average_brightness, max_radius);
+                    let radius =
+                        radius(average_brightness, adjusted_min_radius, adjusted_max_radius);
 
                     // write the sampling as a circle to the target page
                     let circle_center = (
@@ -178,10 +183,14 @@ pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
     let paper_width_pixels = args.paper_width_pixels;
     let paper_height_pixels = args.paper_height_pixels;
     let square_size = args.square_size;
+    let max_radius = max_radius(square_size);
+    let min_radius_percentage = args.min_radius_percentage;
+    let max_radius_percentage = args.max_radius_percentage;
+    let adjusted_max_radius = max_radius * max_radius_percentage;
+    let adjusted_min_radius = max_radius * min_radius_percentage;
     let half_square_size = (square_size / 2.0).floor() as i32;
     let square_size_floor = square_size.floor() as u32;
     // let color_depth = args.color_depth;
-    let max_radius = args.max_radius;
     let pages_width_pixels = (pages_width as f32 * paper_width_pixels).ceil() as u32;
     let pages_height_pixels = (pages_height as f32 * paper_height_pixels).ceil() as u32;
 
@@ -303,7 +312,8 @@ pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
 
                     let average_brightness = average_brightness(&pixels_in_square);
 
-                    let radius = radius(average_brightness, max_radius);
+                    let radius =
+                        radius(average_brightness, adjusted_min_radius, adjusted_max_radius);
 
                     // write the sampling as a circle to the target page
                     let circle_center = (
@@ -362,16 +372,31 @@ fn average_brightness(pixels: &[Rgba<u8>]) -> f32 {
     brightness_nominal / i
 }
 
-fn radius(average_brightness: f32, max_radius: f32) -> f32 {
-    (1.0 - average_brightness) * max_radius
+// this function takes the adjusted min and max radii,
+// and clamps the calculated radius so that:
+// calculated_radius >= min_radius && calculated_radius <= max_radius.
+// by default, the min_radius_percentage is 0, which allows a 0-radius dot (meaning no
+// dot will be drawn), and the max_radius_percentage is 100, allowing the maximum radius
+// for a given brightness to be the "theoretical" max radius as calculated in the
+// `max_radius` function
+fn radius(average_brightness: f32, adjusted_min_radius: f32, adjusted_max_radius: f32) -> f32 {
+    let calculated_radius = (1.0 - average_brightness) * adjusted_max_radius;
+
+    if calculated_radius < adjusted_min_radius {
+        adjusted_min_radius
+    } else {
+        calculated_radius
+    }
 }
 
-pub fn max_radius(raster_size: f32, resolution: f32) -> f32 {
-    raster_size * resolution / 2.0
-}
-
-pub fn square_size(max_radius: f32) -> f32 {
-    2.0 * (max_radius - 1.0) / std::f32::consts::SQRT_2
+// a2 + b2 = diameter
+// diameter = sqrt(a2 + b2)
+// radius = diameter / 2
+// this is the minimum radius of a circle necessary to fully enclose a square
+// it is the "theoretical" max radius for any given raster square
+// is clamped by the function `radius`
+fn max_radius(square_size: f32) -> f32 {
+    (square_size.powf(2.0) * 2.0).sqrt() / 2.0
 }
 
 fn brightness(pixel: Rgba<u8>) -> f32 {

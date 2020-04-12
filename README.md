@@ -22,6 +22,7 @@ In `target/deploy`:
 - [ ] styling/UX
 - [x] zip all files for download, "download all" link
 - [x] svg backend
+- [x] allow user to control min/max percentages for dot sizes
 - [ ] way to make the thing not block while it renders, if possible
 - [ ] any kind of perf optimization at all
 - [ ] investigate converting to `web-sys` from `stdweb`

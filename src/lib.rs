@@ -1,11 +1,11 @@
-#![recursion_limit = "1024"]
+#![recursion_limit = "2048"]
 
 const RAT_VERSION: &str = env!("RAT_VERSION");
 
 mod rasterize;
 
 use image::{ImageBuffer, Rgba};
-use rasterize::{ColorDepth, Orientation, PaperSize, RESOLUTION};
+use rasterize::{ColorDepth, Orientation, PaperSize};
 use std::borrow::Borrow;
 use std::fmt;
 use std::io::{Cursor, Seek, Write};
@@ -67,8 +67,8 @@ struct ImageBackendProps {
     pages_width: u32,
     pages_height: u32,
     image: Rc<Option<image::DynamicImage>>,
-    raster_size: f32,
-    max_radius: f32,
+    min_radius_percentage: f32,
+    max_radius_percentage: f32,
     square_size: f32,
     paper_size: PaperSize,
     orientation: Orientation,
@@ -105,8 +105,9 @@ impl Component for ImageBackend {
                         pages_width: self.props.pages_width,
                         pages_height: self.props.pages_height,
                         square_size: self.props.square_size,
+                        min_radius_percentage: self.props.min_radius_percentage,
+                        max_radius_percentage: self.props.max_radius_percentage,
                         color_depth: self.props.color_depth,
-                        max_radius: self.props.max_radius,
                     };
 
                     let start = stdweb::js! {
@@ -222,8 +223,8 @@ struct SVGBackendProps {
     pages_width: u32,
     pages_height: u32,
     image: Rc<Option<image::DynamicImage>>,
-    raster_size: f32,
-    max_radius: f32,
+    min_radius_percentage: f32,
+    max_radius_percentage: f32,
     square_size: f32,
     paper_size: PaperSize,
     orientation: Orientation,
@@ -260,8 +261,9 @@ impl Component for SVGBackend {
                         pages_width: self.props.pages_width,
                         pages_height: self.props.pages_height,
                         square_size: self.props.square_size,
+                        min_radius_percentage: self.props.min_radius_percentage,
+                        max_radius_percentage: self.props.max_radius_percentage,
                         color_depth: self.props.color_depth,
-                        max_radius: self.props.max_radius,
                     };
 
                     let start = stdweb::js! {
@@ -383,8 +385,8 @@ pub struct Model {
     pages_width: u32,
     pages_height: u32,
     image: Rc<Option<image::DynamicImage>>,
-    raster_size: f32,
-    max_radius: f32,
+    min_radius_percentage: f32,
+    max_radius_percentage: f32,
     square_size: f32,
     paper_size: PaperSize,
     orientation: Orientation,
@@ -397,7 +399,9 @@ pub enum Msg {
     FileLoaded(FileData),
     UpdatePageWidth(String),
     UpdatePageHeight(String),
-    UpdateRasterSize(String),
+    UpdateSquareSize(String),
+    UpdateMinRadiusPercentage(String),
+    UpdateMaxRadiusPercentage(String),
     UpdatePaperSize(String),
     UpdateOrientation(String),
     UpdateBackend(String),
@@ -409,8 +413,6 @@ impl Component for Model {
     type Properties = ();
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let raster_size = 0.2;
-        let max_radius = rasterize::max_radius(raster_size, RESOLUTION);
         Model {
             link,
             reader: ReaderService::new(),
@@ -418,9 +420,9 @@ impl Component for Model {
             pages_width: 1,
             pages_height: 1,
             image: Rc::new(None),
-            raster_size,
-            max_radius,
-            square_size: rasterize::square_size(max_radius),
+            square_size: 18.0,
+            min_radius_percentage: 0.0,
+            max_radius_percentage: 1.0,
             paper_size: PaperSize::USLetter,
             orientation: Orientation::Portrait,
             backend: Backend::Image,
@@ -468,15 +470,61 @@ impl Component for Model {
                 true
             }
 
-            Msg::UpdateRasterSize(s) => {
+            Msg::UpdateSquareSize(s) => {
                 let as_f32 = s.parse::<f32>().unwrap();
-                self.raster_size = as_f32;
-                self.max_radius = rasterize::max_radius(self.raster_size, RESOLUTION);
-                self.square_size = rasterize::square_size(self.max_radius);
+                self.square_size = as_f32;
 
-                stdweb::console!(log, "raster size set to", self.raster_size);
-                stdweb::console!(log, "max_radius set to", self.max_radius);
-                stdweb::console!(log, "square_size set to", self.square_size);
+                stdweb::console!(log, "square_size set to", self.square_size, "mm");
+
+                true
+            }
+
+            Msg::UpdateMinRadiusPercentage(s) => {
+                let as_isize = s.parse::<isize>().unwrap();
+                self.min_radius_percentage = if as_isize < 0 {
+                    0.0
+                } else if as_isize > 100 {
+                    1.0
+                } else {
+                    as_isize as f32 / 100.0
+                };
+
+                if self.min_radius_percentage > self.max_radius_percentage {
+                    stdweb::console!(log, "min raster % > max raster %, setting to 0%");
+                    self.min_radius_percentage = 0.0;
+                }
+
+                stdweb::console!(
+                    log,
+                    "set min raster percentage to ",
+                    self.min_radius_percentage * 100.0,
+                    "%"
+                );
+
+                true
+            }
+
+            Msg::UpdateMaxRadiusPercentage(s) => {
+                let as_isize = s.parse::<isize>().unwrap();
+                self.max_radius_percentage = if as_isize < 0 {
+                    0.0
+                } else if as_isize > 100 {
+                    1.0
+                } else {
+                    as_isize as f32 / 100.0
+                };
+
+                if self.max_radius_percentage < self.min_radius_percentage {
+                    stdweb::console!(log, "max raster % < min raster %, setting to 100%");
+                    self.max_radius_percentage = 1.0;
+                }
+
+                stdweb::console!(
+                    log,
+                    "set max raster percentage to ",
+                    self.max_radius_percentage * 100.0,
+                    "%"
+                );
 
                 true
             }
@@ -550,10 +598,6 @@ impl Component for Model {
 
                 <div>
                     { format!("{}w x {}h pages", self.pages_width, self.pages_height) }
-                </div>
-
-                <div>
-                    { format!("max radius: {}", self.max_radius)}
                 </div>
 
                 <div>
@@ -654,17 +698,35 @@ impl Component for Model {
                       max="25"
                       value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
 
-                    <div>{"raster size"}</div>
+                    <div>{"square size, in mm"}</div>
                     <input
-                      min="0.1"
-                      max="5"
-                      step="0.05"
-                      type="range"
-                      name="height"
-                      value={self.raster_size}
-                      oninput=self.link.callback(|e: InputData| Msg::UpdateRasterSize(e.value))/>
+                    type="number"
+                    name="square-size"
+                    value={self.square_size}
+                    oninput=self.link.callback(|e: InputData| Msg::UpdateSquareSize(e.value))/>
+
+
+                    <div>{"minimum raster percentage"}</div>
+                    <input
+                    type="range"
+                    name="min-raster-perc"
+                    min="0"
+                    max="100"
+                    value={(self.min_radius_percentage * 100.0).floor() as usize}
+                    oninput=self.link.callback(|e: InputData| Msg::UpdateMinRadiusPercentage(e.value))/>
+                    <span>{(self.min_radius_percentage * 100.0).floor() as usize}</span>
+
+                    <div>{"maximum raster percentage"}</div>
+                    <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    name="max-raster-perc"
+                    value={(self.max_radius_percentage * 100.0).floor() as usize}
+                    oninput=self.link.callback(|e: InputData| Msg::UpdateMaxRadiusPercentage(e.value))/>
 
                 </div>
+                <span>{(self.max_radius_percentage * 100.0).floor() as usize}</span>
 
                 {
                     match self.backend {
@@ -672,12 +734,12 @@ impl Component for Model {
                             html! {
                                 <ImageBackend
                                     image={self.image.clone()}
-                                    max_radius={self.max_radius}
                                     orientation={self.orientation}
                                     pages_height={self.pages_height}
                                     pages_width={self.pages_width}
                                     paper_size={self.paper_size}
-                                    raster_size={self.raster_size}
+                                    min_radius_percentage={self.min_radius_percentage}
+                                    max_radius_percentage={self.max_radius_percentage}
                                     square_size={self.square_size}
                                     color_depth={self.color_depth}
                                 />
@@ -687,12 +749,12 @@ impl Component for Model {
                             html! {
                                 <SVGBackend
                                     image={self.image.clone()}
-                                    max_radius={self.max_radius}
                                     orientation={self.orientation}
                                     pages_height={self.pages_height}
                                     pages_width={self.pages_width}
                                     paper_size={self.paper_size}
-                                    raster_size={self.raster_size}
+                                    min_radius_percentage={self.min_radius_percentage}
+                                    max_radius_percentage={self.max_radius_percentage}
                                     square_size={self.square_size}
                                     color_depth={self.color_depth}
                                 />
@@ -705,7 +767,7 @@ impl Component for Model {
     }
 }
 
-fn zip<'a, W: Write + Seek>(
+fn zip<W: Write + Seek>(
     writer: &mut W,
     files: Vec<(String, Vec<u8>)>,
 ) -> zip::result::ZipResult<()> {
@@ -716,7 +778,7 @@ fn zip<'a, W: Write + Seek>(
 
     for (filename, bytes) in files {
         zip.start_file(filename, options)?;
-        zip.write(&bytes)?;
+        zip.write_all(&bytes)?;
     }
 
     zip.finish()?;
