@@ -7,15 +7,19 @@ a reimagining of https://rasterbator.net/, inspired by the source: https://githu
 
 # dev
 
-`$ cargo web start --release`
+```
+# dev profile
+$ yarn run start:dev
+
+# release profile
+$ yarn run start:production
+```
 
 # build
 
-`$ cargo web deploy --release`
+`$ yarn build`
 
-In `target/deploy`:
-`$ wasm-opt -Os -o rat.wasm rat.wasm`
-
+Compress the contents of `dist` into a zip file and upload
 
 # todo
 
