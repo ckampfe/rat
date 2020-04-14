@@ -25,5 +25,5 @@ In `target/deploy`:
 - [x] allow user to control min/max percentages for dot sizes
 - [ ] way to make the thing not block while it renders, if possible
 - [ ] any kind of perf optimization at all
-- [ ] investigate converting to `web-sys` from `stdweb`
+- [x] investigate converting to `web-sys` from `stdweb`
 - [ ] `wee_alloc` (https://rustwasm.github.io/book/game-of-life/code-size.html)

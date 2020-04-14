@@ -45,13 +45,6 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
     let (scaled_image_width_pixels, scaled_image_height_pixels) =
         image_scaled_to_fit_on_pages.dimensions();
 
-    stdweb::console!(
-        log,
-        "dimensions of scaled image:",
-        scaled_image_width_pixels,
-        scaled_image_height_pixels
-    );
-
     let mut pages_pairs = Vec::with_capacity(
         (pages_width * pages_height)
             .try_into()
@@ -202,13 +195,6 @@ pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
 
     let (scaled_image_width_pixels, scaled_image_height_pixels) =
         image_scaled_to_fit_on_pages.dimensions();
-
-    stdweb::console!(
-        log,
-        "dimensions of scaled image:",
-        scaled_image_width_pixels,
-        scaled_image_height_pixels
-    );
 
     let mut pages_pairs = Vec::with_capacity(
         (pages_width * pages_height)
@@ -447,8 +433,8 @@ impl PaperSize {
         self.dimensions_inches(orientation).height_pixels
     }
 
-    pub fn from_string(s: String) -> Option<PaperSize> {
-        match s.as_str() {
+    pub fn from_string(s: &str) -> Option<PaperSize> {
+        match s {
             "US Letter" => Some(PaperSize::USLetter),
             "A4" => Some(PaperSize::A4),
             "A3" => Some(PaperSize::A3),
