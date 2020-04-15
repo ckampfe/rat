@@ -580,185 +580,194 @@ impl Component for Model {
 
     fn view(&self) -> Html {
         html! {
-            <div>
-                <a href="https://github.com/ckampfe/rat">{ format!("source code version {}", RAT_VERSION) }</a>
-                <div>
-                    {
-                        format!("{}in x {}in",
-                           self.paper_size.width_inches(self.orientation) * self.pages_width as f32,
-                           self.paper_size.height_inches(self.orientation) * self.pages_height as f32
-                        )
-                    }
-                </div>
-
-                <div>
-                    { format!("{}w x {}h pages", self.pages_width, self.pages_height) }
-                </div>
-
-                <div>
-                    { format!("square size: {}", self.square_size)}
-                </div>
-
-                <div>
-                    <div>
-                        { "paper size: " }
-                        <select name="paper_size" onchange=self.link.callback(|e: ChangeData| {
-                            match e {
-                                ChangeData::Select(s) => {
-                                    Msg::UpdatePaperSize(s.value())
-                                },
-                                _ => unreachable!()
+            <div class="container">
+                <div class="row">
+                    <div class="column">
+                        <a href="https://github.com/ckampfe/rat">{ format!("source code version {}", RAT_VERSION) }</a>
+                        <div>
+                            {
+                                format!("{}in x {}in",
+                                   self.paper_size.width_inches(self.orientation) * self.pages_width as f32,
+                                   self.paper_size.height_inches(self.orientation) * self.pages_height as f32
+                                )
                             }
-                        })>
-                        {
-                            for PaperSize::sizes().map(|paper_size| {
-                                html! {
-                                    <option value={ paper_size.to_string() }> { paper_size.to_string() } </option>
+                        </div>
+
+                        <div>
+                            { format!("{}w x {}h pages", self.pages_width, self.pages_height) }
+                        </div>
+
+                        <div>
+                            { format!("square size: {}", self.square_size)}
+                        </div>
+
+                        <div>
+                            <div>
+                                { "paper size: " }
+                                <select name="paper_size" onchange=self.link.callback(|e: ChangeData| {
+                                    match e {
+                                        ChangeData::Select(s) => {
+                                            Msg::UpdatePaperSize(s.value())
+                                        },
+                                        _ => unreachable!()
+                                    }
+                                })>
+                                {
+                                    for PaperSize::sizes().map(|paper_size| {
+                                        html! {
+                                            <option value={ paper_size.to_string() }> { paper_size.to_string() } </option>
+                                        }
+                                    })
                                 }
-                            })
-                        }
-                        </select>
+                                </select>
+                            </div>
+
+                            <div>
+                                { "orientation: "}
+                                <select name="orientation" onchange=self.link.callback(|e: ChangeData| {
+                                    match e {
+                                        ChangeData::Select(s) => {
+                                            Msg::UpdateOrientation(s.value())
+                                        },
+                                        _ => unreachable!()
+                                    }
+                                })>
+                                   <option value={ Orientation::Portrait.to_string() }> { Orientation::Portrait.to_string() } </option>
+                                   <option value={ Orientation::Landscape.to_string() }> { Orientation::Landscape.to_string() } </option>
+                                </select>
+                            </div>
+
+                            <div>
+                                { "backend: " }
+                                <select name="backend" onchange=self.link.callback(|e: ChangeData| {
+                                    match e {
+                                        ChangeData::Select(s) => {
+                                            Msg::UpdateBackend(s.value())
+                                        },
+                                        _ => unreachable!()
+                                    }
+                                })>
+                                    <option value={ Backend::Image.to_string() }> { Backend::Image.to_string() } </option>
+                                    <option value={ Backend::SVG.to_string() }> { Backend::SVG.to_string() } </option>
+                                </select>
+                            </div>
+
+                            <div>
+                                { "color: " }
+                                <select name="color_depth" onchange=self.link.callback(|e: ChangeData| {
+                                    match e {
+                                        ChangeData::Select(s) => {
+                                            Msg::UpdateColorDepth(s.value())
+                                        },
+                                        _ => unreachable!()
+                                    }
+                                })>
+                                    <option value={ ColorDepth::RGB.to_string() }> { ColorDepth::RGB.to_string() } </option>
+                                    <option value={ ColorDepth::Grayscale.to_string() }> { ColorDepth::Grayscale.to_string() } </option>
+                                </select>
+                            </div>
+
+
+                            <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
+                                let mut res = vec![];
+
+                                if let ChangeData::Files(files) = v {
+                                    if let Some(file) = files.get(0) {
+                                        res.push(file);
+                                    }
+                                }
+
+                                Msg::FileSelection(res)
+                            }) />
+
+                            <div>{"width (pages)"}</div>
+                            <input
+                              type="range"
+                              name="width"
+                              min="1"
+                              max="25"
+                              value={self.pages_width}
+                              oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
+
+                            <div>{"height (pages)"}</div>
+                            <input
+                              type="range"
+                              name="height"
+                              min="1"
+                              max="25"
+                              value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
+
+                            <div>{"square size, in mm"}</div>
+                            <input
+                            type="number"
+                            name="square-size"
+                            value={self.square_size}
+                            oninput=self.link.callback(|e: InputData| Msg::UpdateSquareSize(e.value))/>
+
+
+                            <div>{"minimum raster percentage"}</div>
+                            <input
+                            type="range"
+                            name="min-raster-perc"
+                            min="0"
+                            max="100"
+                            value={(self.min_radius_percentage * 100.0).floor() as usize}
+                            oninput=self.link.callback(|e: InputData| Msg::UpdateMinRadiusPercentage(e.value))/>
+                            <span>{(self.min_radius_percentage * 100.0).floor() as usize}</span>
+
+                            <div>{"maximum raster percentage"}</div>
+                            <input
+                            type="range"
+                            min="1"
+                            max="100"
+                            name="max-raster-perc"
+                            value={(self.max_radius_percentage * 100.0).floor() as usize}
+                            oninput=self.link.callback(|e: InputData| Msg::UpdateMaxRadiusPercentage(e.value))/>
+                        <span>{(self.max_radius_percentage * 100.0).floor() as usize}</span>
+
+                        </div>
                     </div>
-
-                    <div>
-                        { "orientation: "}
-                        <select name="orientation" onchange=self.link.callback(|e: ChangeData| {
-                            match e {
-                                ChangeData::Select(s) => {
-                                    Msg::UpdateOrientation(s.value())
-                                },
-                                _ => unreachable!()
-                            }
-                        })>
-                           <option value={ Orientation::Portrait.to_string() }> { Orientation::Portrait.to_string() } </option>
-                           <option value={ Orientation::Landscape.to_string() }> { Orientation::Landscape.to_string() } </option>
-                        </select>
-                    </div>
-
-                    <div>
-                        { "backend: " }
-                        <select name="backend" onchange=self.link.callback(|e: ChangeData| {
-                            match e {
-                                ChangeData::Select(s) => {
-                                    Msg::UpdateBackend(s.value())
-                                },
-                                _ => unreachable!()
-                            }
-                        })>
-                            <option value={ Backend::Image.to_string() }> { Backend::Image.to_string() } </option>
-                            <option value={ Backend::SVG.to_string() }> { Backend::SVG.to_string() } </option>
-                        </select>
-                    </div>
-
-                    <div>
-                        { "color: " }
-                        <select name="color_depth" onchange=self.link.callback(|e: ChangeData| {
-                            match e {
-                                ChangeData::Select(s) => {
-                                    Msg::UpdateColorDepth(s.value())
-                                },
-                                _ => unreachable!()
-                            }
-                        })>
-                            <option value={ ColorDepth::RGB.to_string() }> { ColorDepth::RGB.to_string() } </option>
-                            <option value={ ColorDepth::Grayscale.to_string() }> { ColorDepth::Grayscale.to_string() } </option>
-                        </select>
-                    </div>
-
-
-                    <input type="file" id="input" onchange=self.link.callback(move |v: ChangeData| {
-                        let mut res = vec![];
-
-                        if let ChangeData::Files(files) = v {
-                            if let Some(file) = files.get(0) {
-                                res.push(file);
-                            }
-                        }
-
-                        Msg::FileSelection(res)
-                    }) />
-
-                    <div>{"width (pages)"}</div>
-                    <input
-                      type="range"
-                      name="width"
-                      min="1"
-                      max="25"
-                      value={self.pages_width}
-                      oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
-
-                    <div>{"height (pages)"}</div>
-                    <input
-                      type="range"
-                      name="height"
-                      min="1"
-                      max="25"
-                      value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
-
-                    <div>{"square size, in mm"}</div>
-                    <input
-                    type="number"
-                    name="square-size"
-                    value={self.square_size}
-                    oninput=self.link.callback(|e: InputData| Msg::UpdateSquareSize(e.value))/>
-
-
-                    <div>{"minimum raster percentage"}</div>
-                    <input
-                    type="range"
-                    name="min-raster-perc"
-                    min="0"
-                    max="100"
-                    value={(self.min_radius_percentage * 100.0).floor() as usize}
-                    oninput=self.link.callback(|e: InputData| Msg::UpdateMinRadiusPercentage(e.value))/>
-                    <span>{(self.min_radius_percentage * 100.0).floor() as usize}</span>
-
-                    <div>{"maximum raster percentage"}</div>
-                    <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    name="max-raster-perc"
-                    value={(self.max_radius_percentage * 100.0).floor() as usize}
-                    oninput=self.link.callback(|e: InputData| Msg::UpdateMaxRadiusPercentage(e.value))/>
-                <span>{(self.max_radius_percentage * 100.0).floor() as usize}</span>
-
+                    <div class="column"></div>
+                    <div class="column"></div>
                 </div>
+                <div class="row">
 
-                {
-                    match self.backend {
-                        Backend::Image => {
-                            html! {
-                                <ImageBackend
-                                    image={self.image.clone()}
-                                    orientation={self.orientation}
-                                    pages_height={self.pages_height}
-                                    pages_width={self.pages_width}
-                                    paper_size={self.paper_size}
-                                    min_radius_percentage={self.min_radius_percentage}
-                                    max_radius_percentage={self.max_radius_percentage}
-                                    square_size={self.square_size}
-                                    color_depth={self.color_depth}
-                                />
-                            }
-                        },
-                        Backend::SVG => {
-                            html! {
-                                <SVGBackend
-                                    image={self.image.clone()}
-                                    orientation={self.orientation}
-                                    pages_height={self.pages_height}
-                                    pages_width={self.pages_width}
-                                    paper_size={self.paper_size}
-                                    min_radius_percentage={self.min_radius_percentage}
-                                    max_radius_percentage={self.max_radius_percentage}
-                                    square_size={self.square_size}
-                                    color_depth={self.color_depth}
-                                />
+                    {
+                        match self.backend {
+                            Backend::Image => {
+                                html! {
+                                    <ImageBackend
+                                        image={self.image.clone()}
+                                        orientation={self.orientation}
+                                        pages_height={self.pages_height}
+                                        pages_width={self.pages_width}
+                                        paper_size={self.paper_size}
+                                        min_radius_percentage={self.min_radius_percentage}
+                                        max_radius_percentage={self.max_radius_percentage}
+                                        square_size={self.square_size}
+                                        color_depth={self.color_depth}
+                                    />
+                                }
+                            },
+                            Backend::SVG => {
+                                html! {
+                                    <SVGBackend
+                                        image={self.image.clone()}
+                                        orientation={self.orientation}
+                                        pages_height={self.pages_height}
+                                        pages_width={self.pages_width}
+                                        paper_size={self.paper_size}
+                                        min_radius_percentage={self.min_radius_percentage}
+                                        max_radius_percentage={self.max_radius_percentage}
+                                        square_size={self.square_size}
+                                        color_depth={self.color_depth}
+                                    />
+                                }
                             }
                         }
                     }
-                }
+            </div>
+
             </div>
         }
     }

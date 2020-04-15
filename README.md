@@ -23,7 +23,7 @@ Compress the contents of `dist` into a zip file and upload
 
 # todo
 
-- [ ] styling/UX
+- [x] styling/UX
 - [x] zip all files for download, "download all" link
 - [x] svg backend
 - [x] allow user to control min/max percentages for dot sizes
