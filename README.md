@@ -31,3 +31,4 @@ Compress the contents of `dist` into a zip file and upload
 - [ ] any kind of perf optimization at all
 - [x] investigate converting to `web-sys` from `stdweb`
 - [ ] `wee_alloc` (https://rustwasm.github.io/book/game-of-life/code-size.html)
+- [ ] gzip the wasm bundle (seems to be an issue with Amplify)
