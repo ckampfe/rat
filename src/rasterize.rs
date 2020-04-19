@@ -57,8 +57,6 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
         }
     }
 
-    let mut output_pages = Vec::with_capacity(pages_pairs.len());
-
     // calculate pages, left-right top-bottom
     // each page is its own sub image
     let pages = pages_pairs.into_iter().filter_map(|(page_x, page_y)| {
@@ -99,74 +97,73 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
 
     let mut pixels_in_square = Vec::with_capacity(square_size.powi(2).ceil() as usize);
 
-    let rasterized_pages = pages.map(|page| {
-        // create a dupe of this page on which we will draw circles
-        let (page_width_pixels, page_height_pixels) = page.dimensions();
-        let mut target_page =
-            ImageBuffer::<Rgba<u8>, Vec<u8>>::new(page_width_pixels, page_height_pixels);
+    pages
+        .map(|page| {
+            // create a dupe of this page on which we will draw circles
+            let (page_width_pixels, page_height_pixels) = page.dimensions();
+            let mut target_page =
+                ImageBuffer::<Rgba<u8>, Vec<u8>>::new(page_width_pixels, page_height_pixels);
 
-        let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
-        let squares_height = (page_height_pixels as f32 / square_size).ceil() as u32;
+            let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
+            let squares_height = (page_height_pixels as f32 / square_size).ceil() as u32;
 
-        // divide into squares
-        for square_y in 0..squares_height {
-            for square_x in 0..squares_width {
-                let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
-                let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
+            // divide into squares
+            for square_y in 0..squares_height {
+                for square_x in 0..squares_width {
+                    let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
+                    let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
 
-                let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
-                    Some(square_size_floor)
-                } else {
-                    page_width_pixels.checked_sub(current_pixel_x)
-                };
-
-                let y_span = if current_pixel_y + (square_size_floor) < page_height_pixels {
-                    Some(square_size_floor)
-                } else {
-                    page_height_pixels.checked_sub(current_pixel_y)
-                };
-
-                // if the span is nonzero and within the boundary
-                if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
-                    // for a given square, sample the square form the source page
-                    // getting radius and color
-                    let square =
-                        SubImage::new(&page, current_pixel_x, current_pixel_y, x_span, y_span);
-
-                    pixels_in_square.clear();
-                    pixels_in_square.extend(square.pixels().map(|(_, _, pixel)| pixel));
-
-                    let average_pixel_color = match color_depth {
-                        ColorDepth::RGB => average_color(&pixels_in_square),
-                        ColorDepth::Grayscale => BLACK,
+                    let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
+                        Some(square_size_floor)
+                    } else {
+                        page_width_pixels.checked_sub(current_pixel_x)
                     };
 
-                    let average_brightness = average_brightness(&pixels_in_square);
+                    let y_span = if current_pixel_y + (square_size_floor) < page_height_pixels {
+                        Some(square_size_floor)
+                    } else {
+                        page_height_pixels.checked_sub(current_pixel_y)
+                    };
 
-                    let radius =
-                        radius(average_brightness, adjusted_min_radius, adjusted_max_radius);
+                    // if the span is nonzero and within the boundary
+                    if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
+                        // for a given square, sample the square form the source page
+                        // getting radius and color
+                        let square =
+                            SubImage::new(&page, current_pixel_x, current_pixel_y, x_span, y_span);
 
-                    // write the sampling as a circle to the target page
-                    let circle_center = (
-                        current_pixel_x as i32 + half_square_size,
-                        current_pixel_y as i32 + half_square_size,
-                    );
+                        pixels_in_square.clear();
+                        pixels_in_square.extend(square.pixels().map(|(_, _, pixel)| pixel));
 
-                    imageproc::drawing::draw_filled_circle_mut(
-                        &mut target_page,
-                        circle_center,
-                        radius as i32,
-                        average_pixel_color,
-                    );
+                        let average_pixel_color = match color_depth {
+                            ColorDepth::RGB => average_color(&pixels_in_square),
+                            ColorDepth::Grayscale => BLACK,
+                        };
+
+                        let average_brightness = average_brightness(&pixels_in_square);
+
+                        let radius =
+                            radius(average_brightness, adjusted_min_radius, adjusted_max_radius);
+
+                        // write the sampling as a circle to the target page
+                        let circle_center = (
+                            current_pixel_x as i32 + half_square_size,
+                            current_pixel_y as i32 + half_square_size,
+                        );
+
+                        imageproc::drawing::draw_filled_circle_mut(
+                            &mut target_page,
+                            circle_center,
+                            radius as i32,
+                            average_pixel_color,
+                        );
+                    }
                 }
             }
-        }
 
-        target_page
-    });
-
-    output_pages.extend(rasterized_pages);
-    output_pages
+            target_page
+        })
+        .collect::<Vec<_>>()
 }
 
 pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
@@ -208,8 +205,6 @@ pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
         }
     }
 
-    let mut output_documents = Vec::with_capacity(pages_pairs.len());
-
     // calculate pages, left-right top-bottom
     // each page is its own sub image
     let pages = pages_pairs.into_iter().filter_map(|(page_x, page_y)| {
@@ -250,78 +245,79 @@ pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
 
     let mut pixels_in_square = Vec::with_capacity(square_size.powi(2).ceil() as usize);
 
-    for page in pages {
-        // create a dupe of this page on which we will draw circles
-        let (page_width_pixels, page_height_pixels) = page.dimensions();
+    pages
+        .map(|page| {
+            // create a dupe of this page on which we will draw circles
+            let (page_width_pixels, page_height_pixels) = page.dimensions();
 
-        let mut svg_document = svg::Document::new();
-        svg_document = svg_document.set("viewBox", (0, 0, page_width_pixels, page_height_pixels));
+            let mut svg_document = svg::Document::new();
+            svg_document =
+                svg_document.set("viewBox", (0, 0, page_width_pixels, page_height_pixels));
 
-        let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
-        let squares_height = (page_height_pixels as f32 / square_size).ceil() as u32;
+            let squares_width = (page_width_pixels as f32 / square_size).ceil() as u32;
+            let squares_height = (page_height_pixels as f32 / square_size).ceil() as u32;
 
-        // divide into squares
-        for square_y in 0..squares_height {
-            for square_x in 0..squares_width {
-                let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
-                let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
+            // divide into squares
+            for square_y in 0..squares_height {
+                for square_x in 0..squares_width {
+                    let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
+                    let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
 
-                let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
-                    Some(square_size_floor)
-                } else {
-                    page_width_pixels.checked_sub(current_pixel_x)
-                };
-
-                let y_span = if current_pixel_y + (square_size_floor) < page_height_pixels {
-                    Some(square_size_floor)
-                } else {
-                    page_height_pixels.checked_sub(current_pixel_y)
-                };
-
-                // if the span is nonzero and within the boundary
-                if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
-                    // for a given square, sample the square form the source page
-                    // getting radius and color
-                    let square =
-                        SubImage::new(&page, current_pixel_x, current_pixel_y, x_span, y_span);
-
-                    pixels_in_square.clear();
-                    pixels_in_square.extend(square.pixels().map(|(_, _, pixel)| pixel));
-
-                    // TODO figure out how to add fill color to SVG
-                    /*
-                    let average_pixel_color = match color_depth {
-                        ColorDepth::RGB => average_color(&pixels_in_square),
-                        ColorDepth::Grayscale => BLACK,
+                    let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
+                        Some(square_size_floor)
+                    } else {
+                        page_width_pixels.checked_sub(current_pixel_x)
                     };
-                    */
 
-                    let average_brightness = average_brightness(&pixels_in_square);
+                    let y_span = if current_pixel_y + (square_size_floor) < page_height_pixels {
+                        Some(square_size_floor)
+                    } else {
+                        page_height_pixels.checked_sub(current_pixel_y)
+                    };
 
-                    let radius =
-                        radius(average_brightness, adjusted_min_radius, adjusted_max_radius);
+                    // if the span is nonzero and within the boundary
+                    if let (Some(x_span), Some(y_span)) = (x_span, y_span) {
+                        // for a given square, sample the square form the source page
+                        // getting radius and color
+                        let square =
+                            SubImage::new(&page, current_pixel_x, current_pixel_y, x_span, y_span);
 
-                    // write the sampling as a circle to the target page
-                    let circle_center = (
-                        current_pixel_x as i32 + half_square_size,
-                        current_pixel_y as i32 + half_square_size,
-                    );
+                        pixels_in_square.clear();
+                        pixels_in_square.extend(square.pixels().map(|(_, _, pixel)| pixel));
 
-                    // <circle cx="50" cy="50" r="50"/>
-                    let circle = svg::node::element::Circle::new()
-                        .set("cx", circle_center.0)
-                        .set("cy", circle_center.1)
-                        .set("r", radius);
+                        // TODO figure out how to add fill color to SVG
+                        /*
+                        let average_pixel_color = match color_depth {
+                            ColorDepth::RGB => average_color(&pixels_in_square),
+                            ColorDepth::Grayscale => BLACK,
+                        };
+                        */
 
-                    svg_document = svg_document.add(circle);
+                        let average_brightness = average_brightness(&pixels_in_square);
+
+                        let radius =
+                            radius(average_brightness, adjusted_min_radius, adjusted_max_radius);
+
+                        // write the sampling as a circle to the target page
+                        let circle_center = (
+                            current_pixel_x as i32 + half_square_size,
+                            current_pixel_y as i32 + half_square_size,
+                        );
+
+                        // <circle cx="50" cy="50" r="50"/>
+                        let circle = svg::node::element::Circle::new()
+                            .set("cx", circle_center.0)
+                            .set("cy", circle_center.1)
+                            .set("r", radius);
+
+                        svg_document = svg_document.add(circle);
+                    }
                 }
             }
-        }
 
-        output_documents.push(svg_document);
-    }
-
-    output_documents
+            svg_document
+        })
+        .collect()
 }
 
 fn average_color(pixels: &[Rgba<u8>]) -> Rgba<u8> {
