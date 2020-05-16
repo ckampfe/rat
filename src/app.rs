@@ -578,6 +578,10 @@ impl Component for Model {
         }
     }
 
+    fn change(&mut self, _: Self::Properties) -> ShouldRender {
+        true
+    }
+
     fn view(&self) -> Html {
         html! {
             <div class="container">
@@ -697,7 +701,7 @@ impl Component for Model {
                               max="25"
                               value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
 
-                            <div>{"square size, in mm"}</div>
+                            <div>{"square size, in pixels"}</div>
                             <input
                             type="number"
                             name="square-size"
