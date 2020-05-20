@@ -110,7 +110,11 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
             // divide into squares
             for square_y in 0..squares_height {
                 for square_x in 0..squares_width {
-                    let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
+                    let current_pixel_x: u32 = if square_y % 2 == 0 {
+                        (square_x as f32 * square_size).floor() as u32
+                    } else {
+                        (square_x as f32 * square_size).floor() as u32 + half_square_size as u32
+                    };
                     let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
 
                     let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
@@ -260,7 +264,11 @@ pub fn rasterize_svg(args: RasterizeArgs) -> Vec<svg::Document> {
             // divide into squares
             for square_y in 0..squares_height {
                 for square_x in 0..squares_width {
-                    let current_pixel_x: u32 = (square_x as f32 * square_size).floor() as u32;
+                    let current_pixel_x: u32 = if square_y % 2 == 0 {
+                        (square_x as f32 * square_size).floor() as u32
+                    } else {
+                        (square_x as f32 * square_size).floor() as u32 + half_square_size as u32
+                    };
                     let current_pixel_y: u32 = (square_y as f32 * square_size).floor() as u32;
 
                     let x_span = if current_pixel_x + square_size_floor < page_width_pixels {
