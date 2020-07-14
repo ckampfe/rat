@@ -192,7 +192,7 @@ impl Component for ImageBackend {
                         html! {
                             <div style="display: inline;">
                                 <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
-                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"}></img>
+                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"} />
                             </div>
                         }
                     })
@@ -348,7 +348,7 @@ impl Component for SVGBackend {
                         html! {
                             <div style="display: inline;">
                                 <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
-                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"}></img>
+                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"} />
                             </div>
                         }
                     })
