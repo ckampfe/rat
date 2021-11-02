@@ -2,18 +2,18 @@
 name = "rat"
 version = "0.1.0"
 authors = ["Clark Kampfe <clark.kampfe@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 image = { version = "0.23", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
-imageproc = "0.21"
+imageproc = "0.22"
 js-sys = "0.3"
-svg = "0.8"
+svg = "0.10"
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["File", "Performance", "Window"] }
-yew = "0.17"
+yew = "0.18"
 
 [dependencies.zip]
 version = "0.5"
@@ -23,9 +23,6 @@ default-features = false
 opt-level = 3
 
 [profile.release]
+codegen-units = 1
 lto = true
 opt-level = 's'
-codegen-units = 1
-
-[lib]
-crate-type = ["cdylib"]

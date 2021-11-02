@@ -1,13 +1,13 @@
+mod rasterize;
+
 const RAT_VERSION: &str = env!("RAT_VERSION");
 
-use crate::rasterize;
 use crate::rasterize::{ColorDepth, Orientation, PaperSize};
 use image::{ImageBuffer, Rgba};
 use std::borrow::Borrow;
 use std::fmt;
 use std::io::{Cursor, Seek, Write};
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
 use web_sys::console;
 use web_sys::File;
 use yew::services::reader::{FileData, ReaderTask};
@@ -17,17 +17,17 @@ use yew::{
 };
 
 enum MimeType {
-    PNG,
-    SVG,
-    ZIP,
+    Png,
+    Svg,
+    Zip,
 }
 
 impl fmt::Display for MimeType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
-            MimeType::PNG => "image/png",
-            MimeType::SVG => "image/svg+xml",
-            MimeType::ZIP => "application/zip",
+            MimeType::Png => "image/png",
+            MimeType::Svg => "image/svg+xml",
+            MimeType::Zip => "application/zip",
         };
         write!(f, "{}", s)
     }
@@ -36,14 +36,14 @@ impl fmt::Display for MimeType {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Backend {
     Image,
-    SVG,
+    Svg,
 }
 
 impl fmt::Display for Backend {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             Backend::Image => "Image",
-            Backend::SVG => "SVG",
+            Backend::Svg => "SVG",
         };
         write!(f, "{}", s)
     }
@@ -129,7 +129,8 @@ impl Component for ImageBackend {
                     // get image urls for each png so we can display them
                     // on the page
                     for png in pngs.iter() {
-                        let blob_url_str = bytes_to_object_url(&png, MimeType::PNG.to_string());
+                        let blob_url_str =
+                            bytes_to_object_url(png, &MimeType::Png.to_string()).unwrap();
                         image_urls.push(blob_url_str);
                     }
 
@@ -144,7 +145,8 @@ impl Component for ImageBackend {
 
                     let mut zip_buf = Cursor::new(vec![]);
                     let _zipped_result = zip(&mut zip_buf, zip_inputs);
-                    let zip_url = bytes_to_object_url(zip_buf.get_ref(), MimeType::ZIP.to_string());
+                    let zip_url =
+                        bytes_to_object_url(zip_buf.get_ref(), &MimeType::Zip.to_string()).unwrap();
 
                     self.zip_url = Some(zip_url);
 
@@ -178,7 +180,7 @@ impl Component for ImageBackend {
                 {
                     if let Some(zip_url) = &self.zip_url {
                         html! {
-                            <a style="display: inline;" href={format!("{}", zip_url)} alt={"download all"}>{"download all"}</a>
+                            <a style="display: inline;" href={zip_url.to_string()} alt={"download all"}>{"download all"}</a>
                         }
                     } else {
                         html! {}
@@ -191,8 +193,8 @@ impl Component for ImageBackend {
                     for self.image_urls.iter().map(|image_url| {
                         html! {
                             <div style="display: inline;">
-                                <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
-                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"} />
+                                <a style="display: inline;" href={image_url.to_string()} alt={"meh"}>{"download"}</a>
+                                <img style="display: inline;" src={image_url.to_string()} alt={"meh"} />
                             </div>
                         }
                     })
@@ -276,7 +278,7 @@ impl Component for SVGBackend {
                             let mut svg_string = Vec::new();
                             svg::write(&mut svg_string, svg).unwrap();
                             let s = String::from_utf8(svg_string).unwrap();
-                            bytes_to_object_url(s.as_bytes(), MimeType::SVG.to_string())
+                            bytes_to_object_url(s.as_bytes(), &MimeType::Svg.to_string()).unwrap()
                         })
                         .collect::<Vec<String>>();
 
@@ -295,7 +297,8 @@ impl Component for SVGBackend {
 
                     let mut zip_buf = Cursor::new(vec![]);
                     let _zipped_result = zip(&mut zip_buf, zip_inputs);
-                    let zip_url = bytes_to_object_url(zip_buf.get_ref(), MimeType::ZIP.to_string());
+                    let zip_url =
+                        bytes_to_object_url(zip_buf.get_ref(), &MimeType::Zip.to_string()).unwrap();
 
                     self.zip_url = Some(zip_url);
 
@@ -333,7 +336,7 @@ impl Component for SVGBackend {
                     if let Some(zip_url) = &self.zip_url {
                         html! {
 
-                            <a style="display: inline;" href={format!("{}", zip_url)} alt={"download all"}>{"download all"}</a>
+                            <a style="display: inline;" href={zip_url.to_string()} alt={"download all"}>{"download all"}</a>
                         }
                     } else {
                         html! {}
@@ -347,8 +350,8 @@ impl Component for SVGBackend {
                     for self.image_urls.iter().map(|image_url| {
                         html! {
                             <div style="display: inline;">
-                                <a style="display: inline;" href={format!("{}", image_url)} alt={"meh"}>{"download"}</a>
-                                <img style="display: inline;" src={format!("{}", image_url)} alt={"meh"} />
+                                <a style="display: inline;" href={image_url.to_string()} alt={"meh"}>{"download"}</a>
+                                <img style="display: inline;" src={image_url.to_string()} alt={"meh"} />
                             </div>
                         }
                     })
@@ -373,7 +376,6 @@ impl Component for SVGBackend {
 
 pub struct Model {
     link: ComponentLink<Self>,
-    reader: ReaderService,
     tasks: Vec<ReaderTask>,
     pages_width: u32,
     pages_height: u32,
@@ -408,7 +410,6 @@ impl Component for Model {
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         Model {
             link,
-            reader: ReaderService::new(),
             tasks: vec![],
             pages_width: 1,
             pages_height: 1,
@@ -419,7 +420,7 @@ impl Component for Model {
             paper_size: PaperSize::USLetter,
             orientation: Orientation::Portrait,
             backend: Backend::Image,
-            color_depth: ColorDepth::RGB,
+            color_depth: ColorDepth::Rgb,
         }
     }
 
@@ -428,7 +429,7 @@ impl Component for Model {
             Msg::FileSelection(files) => {
                 for file in files {
                     let callback = self.link.callback(Msg::FileLoaded);
-                    let task = self.reader.read_file(file, callback).unwrap();
+                    let task = ReaderService::read_file(file, callback).unwrap();
                     self.tasks.push(task);
                 }
 
@@ -552,7 +553,7 @@ impl Component for Model {
                     }
                     "SVG" => {
                         console::log_1(&"SVG backend selected".into());
-                        self.backend = Backend::SVG
+                        self.backend = Backend::Svg
                     }
                     _ => unreachable!(),
                 }
@@ -564,7 +565,7 @@ impl Component for Model {
                 match s.as_ref() {
                     "RGB" => {
                         console::log_1(&"RGB color selected".into());
-                        self.color_depth = ColorDepth::RGB;
+                        self.color_depth = ColorDepth::Rgb;
                     }
                     "Grayscale" => {
                         console::log_1(&"Grayscale selected".into());
@@ -652,7 +653,7 @@ impl Component for Model {
                                     }
                                 })>
                                     <option value={ Backend::Image.to_string() }> { Backend::Image.to_string() } </option>
-                                    <option value={ Backend::SVG.to_string() }> { Backend::SVG.to_string() } </option>
+                                    <option value={ Backend::Svg.to_string() }> { Backend::Svg.to_string() } </option>
                                 </select>
                             </div>
 
@@ -666,7 +667,7 @@ impl Component for Model {
                                         _ => unreachable!()
                                     }
                                 })>
-                                    <option value={ ColorDepth::RGB.to_string() }> { ColorDepth::RGB.to_string() } </option>
+                                    <option value={ ColorDepth::Rgb.to_string() }> { ColorDepth::Rgb.to_string() } </option>
                                     <option value={ ColorDepth::Grayscale.to_string() }> { ColorDepth::Grayscale.to_string() } </option>
                                 </select>
                             </div>
@@ -690,7 +691,7 @@ impl Component for Model {
                               name="width"
                               min="1"
                               max="25"
-                              value={self.pages_width}
+                              value={self.pages_width.to_string()}
                               oninput=self.link.callback(|e: InputData| Msg::UpdatePageWidth(e.value))/>
 
                             <div>{"height (pages)"}</div>
@@ -699,13 +700,13 @@ impl Component for Model {
                               name="height"
                               min="1"
                               max="25"
-                              value={self.pages_height} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
+                              value={self.pages_height.to_string()} oninput=self.link.callback(|e: InputData| Msg::UpdatePageHeight(e.value))/>
 
                             <div>{"square size, in pixels"}</div>
                             <input
                             type="number"
                             name="square-size"
-                            value={self.square_size}
+                            value={self.square_size.to_string()}
                             oninput=self.link.callback(|e: InputData| Msg::UpdateSquareSize(e.value))/>
 
 
@@ -715,7 +716,7 @@ impl Component for Model {
                             name="min-raster-perc"
                             min="0"
                             max="100"
-                            value={(self.min_radius_percentage * 100.0).floor() as usize}
+                            value={((self.min_radius_percentage * 100.0).floor() as usize).to_string()}
                             oninput=self.link.callback(|e: InputData| Msg::UpdateMinRadiusPercentage(e.value))/>
                             <span>{(self.min_radius_percentage * 100.0).floor() as usize}</span>
 
@@ -725,7 +726,7 @@ impl Component for Model {
                             min="1"
                             max="100"
                             name="max-raster-perc"
-                            value={(self.max_radius_percentage * 100.0).floor() as usize}
+                            value={((self.max_radius_percentage * 100.0).floor() as usize).to_string()}
                             oninput=self.link.callback(|e: InputData| Msg::UpdateMaxRadiusPercentage(e.value))/>
                         <span>{(self.max_radius_percentage * 100.0).floor() as usize}</span>
 
@@ -753,7 +754,7 @@ impl Component for Model {
                                     />
                                 }
                             },
-                            Backend::SVG => {
+                            Backend::Svg => {
                                 html! {
                                     <SVGBackend
                                         image={self.image.clone()}
@@ -800,7 +801,7 @@ fn encode_image_as_png_bytes(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> Vec<u8> {
     let (x, y) = image.dimensions();
 
     let mut w = Cursor::new(Vec::new());
-    let as_png = image::png::PNGEncoder::new(&mut w);
+    let as_png = image::png::PngEncoder::new(&mut w);
 
     let page_as_bytes = image.into_raw();
 
@@ -811,12 +812,21 @@ fn encode_image_as_png_bytes(image: ImageBuffer<Rgba<u8>, Vec<u8>>) -> Vec<u8> {
     w.into_inner()
 }
 
-/// The types we use in this app are:
-/// image/png, image/svg+xml, and application/zip
-#[wasm_bindgen(module = "/static/js/utils.js")]
-extern "C" {
-    fn bytes_to_object_url(
-        bytes: &[u8],
-        #[wasm_bindgen(js_name = mimeType)] mime_type: String,
-    ) -> String;
+fn bytes_to_object_url(slice: &[u8], mime_type: &str) -> Result<String, wasm_bindgen::JsValue> {
+    let mut blob_properties = web_sys::BlobPropertyBag::new();
+
+    blob_properties.type_(mime_type);
+
+    let bytearray = js_sys::Uint8Array::from(slice);
+
+    let blob = web_sys::Blob::new_with_blob_sequence_and_options(
+        &js_sys::Array::of1(&bytearray),
+        &blob_properties,
+    )?;
+
+    web_sys::Url::create_object_url_with_blob(&blob)
+}
+
+fn main() {
+    yew::start_app::<Model>();
 }

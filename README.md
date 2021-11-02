@@ -9,15 +9,15 @@ a reimagining of https://rasterbator.net/, inspired by the source: https://githu
 
 ```
 # dev profile
-$ yarn run start:dev
+$ trunk serve
 
 # release profile
-$ yarn run start:production
+$ trunk serve --release
 ```
 
 # build
 
-`$ yarn build`
+`$ trunk build --release`
 
 Compress the contents of `dist` into a zip file and upload
 

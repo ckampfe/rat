@@ -140,7 +140,7 @@ pub fn rasterize_image(args: RasterizeArgs) -> Vec<ImageBuffer<Rgba<u8>, Vec<u8>
                         pixels_in_square.extend(square.pixels().map(|(_, _, pixel)| pixel));
 
                         let average_pixel_color = match color_depth {
-                            ColorDepth::RGB => average_color(&pixels_in_square),
+                            ColorDepth::Rgb => average_color(&pixels_in_square),
                             ColorDepth::Grayscale => BLACK,
                         };
 
@@ -399,14 +399,14 @@ fn brightness(pixel: Rgba<u8>) -> f32 {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ColorDepth {
-    RGB,
+    Rgb,
     Grayscale,
 }
 
 impl fmt::Display for ColorDepth {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
-            ColorDepth::RGB => "RGB",
+            ColorDepth::Rgb => "RGB",
             ColorDepth::Grayscale => "Grayscale",
         };
         write!(f, "{}", s)
